@@ -1,4 +1,4 @@
-# 스마트 모델하우스 컨피규레이터
+# 모델하우스 컨피규레이터
 
 > Asset Store 에셋 Modern Apartment로 꾸민 개방형 아파트를 1인칭으로 걸으며, 기본 에셋에서 벽지·바닥재·주방 상판과 소파·러그·그림·화분을 바꾸면 추가 비용이 붙는 Unity 컨피규레이터.
 > 시계 바늘을 돌려 시간대별 햇빛과 실내 조도를 보고, 주방의 커피 로봇팔이 컵을 커피 머신에 놓았다가 식탁으로 가져다준다.
@@ -122,9 +122,10 @@ Assets/ThirdParty/ Asset Store 에셋 (.gitignore로 제외)
 1. GitHub에서 빈 저장소 `com-modelhouse` 생성 (README, .gitignore 추가 체크 해제)
 2. Unity Hub → Unity `6000.4.0f1` 설치 → New project → **Universal 3D** → 이름 `com-modelhouse`
 3. 이 README, `.gitignore`, `.gitattributes`를 프로젝트 루트(`Assets` 폴더 옆)에 복사, `docs/SRS_COM_v1.7.docx` 추가
-4. Edit → Project Settings → Editor
-   - Version Control → Mode: **Visible Meta Files**
-   - Asset Serialization → Mode: **Force Text**
+4. Unity `6000.4.0f1` 버전 관리 설정: **Edit → Project Settings**
+   - 왼쪽 목록의 **Version Control** → Mode: **Visible Meta Files**
+   - 왼쪽 목록의 **Editor** → Asset Serialization → Mode: **Force Text** (기본값이면 유지)
+   - **Version Control은 Editor 내부가 아닌 별도 메뉴**다.
 5. Window → Package Manager → Input System, Cinemachine, ProBuilder, Animation Rigging 설치
 6. Asset Store에서 **Modern Apartment**(Zeps3D)를 각자 구매 → Package Manager → My Assets → Import, Project 창에서 `Assets/Zeps3D`를 `Assets/ThirdParty/` 아래로 옮김
    - 데모 씬 라이트맵은 우리 씬에서 다시 굽는다
