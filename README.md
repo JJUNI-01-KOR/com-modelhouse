@@ -119,8 +119,8 @@ Assets/ThirdParty/ Asset Store 에셋 (.gitignore로 제외)
 
 ### 처음 만드는 사람 (김찬중)
 
-1. GitHub에서 빈 저장소 `com-smart-modelhouse` 생성 (README, .gitignore 추가 체크 해제)
-2. Unity Hub → Unity `6000.4.0f1` 설치 → New project → **Universal 3D** → 이름 `com-smart-modelhouse`
+1. GitHub에서 빈 저장소 `com-modelhouse` 생성 (README, .gitignore 추가 체크 해제)
+2. Unity Hub → Unity `6000.4.0f1` 설치 → New project → **Universal 3D** → 이름 `com-modelhouse`
 3. 이 README, `.gitignore`, `.gitattributes`를 프로젝트 루트(`Assets` 폴더 옆)에 복사, `docs/SRS_COM_v1.7.docx` 추가
 4. Edit → Project Settings → Editor
    - Version Control → Mode: **Visible Meta Files**
@@ -133,13 +133,13 @@ Assets/ThirdParty/ Asset Store 에셋 (.gitignore로 제외)
 8. 첫 커밋
 
 ```bash
-cd com-smart-modelhouse
+cd com-modelhouse
 git init
 git status                 # Library/, Temp/, Assets/ThirdParty/ 가 목록에 없는지 확인
 git add .
 git commit -m "chore: Unity 프로젝트 초기 설정 및 README"
 git branch -M main
-git remote add origin https://github.com/<계정>/com-smart-modelhouse.git
+git remote add origin https://github.com/<계정>/com-modelhouse.git
 git push -u origin main
 ```
 
@@ -148,7 +148,7 @@ git push -u origin main
 ### 받아서 여는 사람 (권오민)
 
 ```bash
-git clone https://github.com/<계정>/com-smart-modelhouse.git
+git clone https://github.com/<계정>/com-modelhouse.git
 ```
 
 Unity Hub → Add → Add project from disk → 클론한 폴더 선택 (Unity `6000.4.0f1`), Modern Apartment는 각자 Import
@@ -201,4 +201,3 @@ Unity Hub → Add → Add project from disk → 클론한 폴더 선택 (Unity `
 ## 회고
 
 <!-- 10/14 작성: 잘한 점, 아쉬운 점, 다음에 바꿀 점 -->
-"# com-modelhouse" 
