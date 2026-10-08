@@ -30,7 +30,9 @@ public class CursorPicker : MonoBehaviour
         Mouse mouse = Mouse.current;
         if (mouse == null) return;
 
-        IClickable hovered = IsPointerOverUI() ? null : Pick(mouse.position.ReadValue());
+        // 이동(WASD)·시점 회전(우클릭) 중에는 강조하지 않음 → 멈췄을 때만 밝게 표시
+        bool moving = IsMoving(mouse);
+        IClickable hovered = (moving || IsPointerOverUI()) ? null : Pick(mouse.position.ReadValue());
 
         // 강조 대상이 바뀌었을 때만 끄고 켬
         if (!ReferenceEquals(hovered, current))
@@ -43,6 +45,13 @@ public class CursorPicker : MonoBehaviour
         // 오른쪽 버튼으로 시점 돌리는 중엔 왼쪽 클릭 무시
         if (mouse.leftButton.wasPressedThisFrame && !mouse.rightButton.isPressed)
             current?.OnClick();
+    }
+
+    private static bool IsMoving(Mouse mouse)
+    {
+        if (mouse.rightButton.isPressed) return true;
+        Keyboard kb = Keyboard.current;
+        return kb != null && (kb.wKey.isPressed || kb.aKey.isPressed || kb.sKey.isPressed || kb.dKey.isPressed);
     }
 
     private IClickable Pick(Vector2 screenPos)

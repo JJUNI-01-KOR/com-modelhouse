@@ -408,6 +408,32 @@ public static class COMSetupTools
         Debug.Log("[COM] 옵션 목록 갱신 완료 (벽지·바닥재)");
     }
 
+    // NFR-03 검사: 문·문틀 실제 높이(월드 기준 m)와 모델 스케일을 Console에 출력
+    [MenuItem("COM/7. 문 높이·스케일 재기 (NFR-03)")]
+    private static void MeasureDoors()
+    {
+        GameObject apt = GameObject.Find("open_concept_apartment_unity");
+        if (apt != null)
+        {
+            Debug.Log($"[COM] 아파트 Transform Scale = {apt.transform.lossyScale}");
+            Object src = PrefabUtility.GetCorrespondingObjectFromOriginalSource(apt);
+            string path = src != null ? AssetDatabase.GetAssetPath(src) : "";
+            if (AssetImporter.GetAtPath(path) is ModelImporter mi)
+                Debug.Log($"[COM] FBX Scale Factor = {mi.globalScale}, Convert Units(useFileScale) = {mi.useFileScale}, 파일 단위 배율 = {mi.fileScale}");
+        }
+
+        foreach (Renderer r in Object.FindObjectsByType<Renderer>())
+        {
+            string n = r.name.ToLower();
+            if (!n.StartsWith("sm_door") && !n.StartsWith("sm_closet_door")) continue;
+            Vector3 s = r.bounds.size;   // 월드 기준 크기(m)
+            Debug.Log($"[COM] {r.name}: 높이 {s.y:0.00}m, 폭 {Mathf.Max(s.x, s.z):0.00}m, 두께 {Mathf.Min(s.x, s.z):0.00}m (Scale {r.transform.lossyScale})", r);
+        }
+
+        Camera cam = Camera.main;
+        if (cam != null) Debug.Log($"[COM] 비교용: 카메라(눈) 높이 y = {cam.transform.position.y:0.00}m");
+    }
+
     private static OptionPart EnsureColorPart(string objName, PartType type, string matName, string namePrefix)
     {
         Material mat = FindMaterial(matName);
