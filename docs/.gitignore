@@ -1,0 +1,60 @@
+# ── Unity가 자동으로 다시 만드는 폴더 (커밋 금지) ──
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+/[Rr]ecordings/
+
+# .meta 파일은 반드시 커밋한다 (에셋 연결 정보)
+!/[Aa]ssets/**/*.meta
+
+# ── IDE / 에디터 ──
+.vs/
+.idea/
+.vscode/
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+*.pidb.meta
+*.pdb.meta
+*.mdb.meta
+*.tmp
+/[Aa]ssets/Plugins/Editor/JetBrains*
+
+# ── 빌드 결과물 (GitHub Releases로 배포) ──
+*.apk
+*.aab
+*.app
+*.exe
+*.unitypackage
+sysinfo.txt
+crashlytics-build.properties
+
+# ── Addressables / StreamingAssets 캐시 ──
+/[Aa]ssets/[Aa]ddressable[Aa]ssets[Dd]ata/*/*.bin*
+/[Aa]ssets/[Ss]treamingAssets/aa.meta
+/[Aa]ssets/[Ss]treamingAssets/aa/*
+
+# ── OS ──
+.DS_Store
+Thumbs.db
+
+# Asset Store 에셋 (EULA상 공개 저장소에 올리지 않음, 각자 Package Manager > My Assets에서 Import)
+/[Aa]ssets/ThirdParty/
+/[Aa]ssets/ThirdParty.meta
+/[Aa]ssets/Zeps3D/
+/[Aa]ssets/Zeps3D.meta
