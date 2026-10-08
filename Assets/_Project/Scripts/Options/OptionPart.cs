@@ -33,7 +33,7 @@ public class OptionPart : MonoBehaviour, IClickable
     [Header("강조")]
     [SerializeField] private float highlightBoost = 1.4f;  // 커서가 올라가면 색을 이만큼 밝게
 
-    /// <summary>클릭됐을 때. HomeEvents가 생기면 HomeEvents.OnPartClicked로 바꿀 자리.</summary>
+    /// <summary>클릭됐을 때. HomeEvents.OnPartClicked로도 같이 보낸다.</summary>
     public static event Action<OptionPart> Clicked;
 
     // 렌더러의 "몇 번째 재질 칸"이 이 파트인지
@@ -253,7 +253,7 @@ public class OptionPart : MonoBehaviour, IClickable
     {
         Debug.Log($"[OptionPart] 클릭: {part}");
         Clicked?.Invoke(this);
-        // TODO(HomeEvents 합류 후): HomeEvents.OnPartClicked?.Invoke(this);
+        HomeEvents.RaisePartClicked(this);   // 중앙 이벤트 관리자로도 알림 (UI는 둘 중 하나만 구독)
     }
 
     // ------------------------------------------------------------

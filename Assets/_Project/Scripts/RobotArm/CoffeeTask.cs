@@ -19,7 +19,7 @@ public class CoffeeTask : MonoBehaviour
     [SerializeField] string logTarget = "주방";
     [SerializeField] RobotArm arm;
     [SerializeField] CoffeeMachine machine;
-    [Tooltip("머그컵 (자식으로 커피 표시용 'Coffee' 오브젝트, 처음엔 꺼 둠)")]
+    [Tooltip("머그컵 (자식으로 커피 표시용 'CoffeeLiquid' 오브젝트, 처음엔 꺼 둠)")]
     [SerializeField] Transform cup;
     [Tooltip("컵 원위치 = 초기화 때 컵을 되돌릴 곳. 비우면 시작 위치")]
     [SerializeField] Transform cupSpot;

@@ -4,8 +4,8 @@ using UnityEngine;
 
 // 메뉴 Tools → COM → 커피 스테이션 만들기 (WBS 2.08)
 // 씬의 RobotArm 옆에 시험용 머그컵과 커피 머신을 기본 도형으로 만들고, CoffeeTask까지 연결한다.
-// - 컵: 피벗이 바닥 가운데, 지름 8cm·높이 9cm, 자식 Coffee(꺼짐), Rigidbody(Kinematic)
-// - 머신: 앞면(추출구)이 로봇을 향함, 자식 CupHolder(추출구 아래 컵 바닥 자리), Steam(김)
+// - 컵: 피벗이 바닥 가운데, 지름 8cm·높이 9cm, 자식 CoffeeLiquid(꺼짐), Rigidbody(Kinematic)
+// - 머신: 앞면(추출구)이 로봇을 향함, 자식 CupHolder(추출구 아래 컵 바닥 자리), Steam(김) + CoffeeBrewEffect(권오민 3.15)
 // - 위치: 로봇 베이스 높이(=식탁 면)에서 로봇의 +X 방향 앞쪽 30cm 정도. 만든 뒤 마음대로 옮겨도 된다.
 // 다시 실행하면 기존 CoffeeStation을 지우고 새로 만든다 (Ctrl+Z로 되돌릴 수 있음).
 public static class CoffeeStationBuilder
@@ -52,7 +52,7 @@ public static class CoffeeStationBuilder
         Part(PrimitiveType.Cylinder, "Body", cup.transform, new Vector3(0f, 0.045f, 0f), new Vector3(0.08f, 0.045f, 0.08f), mugMat, true);
         // 손잡이는 로봇 반대쪽 (그리퍼가 옆에서 잡을 때 걸리지 않게)
         Part(PrimitiveType.Cube, "Handle", cup.transform, new Vector3(0.048f, 0.05f, 0f), new Vector3(0.02f, 0.05f, 0.012f), mugMat, false);
-        GameObject coffee = Part(PrimitiveType.Cylinder, "Coffee", cup.transform, new Vector3(0f, 0.08f, 0f), new Vector3(0.072f, 0.004f, 0.072f), coffeeMat, false);
+        GameObject coffee = Part(PrimitiveType.Cylinder, "CoffeeLiquid", cup.transform, new Vector3(0f, 0.08f, 0f), new Vector3(0.072f, 0.004f, 0.072f), coffeeMat, false);
         coffee.SetActive(false);
 
         var cupSpot = new GameObject("CupSpot");
@@ -80,9 +80,15 @@ public static class CoffeeStationBuilder
         steamGo.transform.localRotation = Quaternion.Euler(-90f, 0f, 0f);    // 위로 뿜기
         ParticleSystem steam = MakeSteam(steamGo);
 
+        var effect = machine.AddComponent<CoffeeBrewEffect>();
+        var efSo = new SerializedObject(effect);
+        efSo.FindProperty("steam").objectReferenceValue = steam;
+        efSo.ApplyModifiedPropertiesWithoutUndo();
+
         var cm = machine.AddComponent<CoffeeMachine>();
         var cmSo = new SerializedObject(cm);
         cmSo.FindProperty("cupHolder").objectReferenceValue = holder.transform;
+        cmSo.FindProperty("effect").objectReferenceValue = effect;
         cmSo.FindProperty("steam").objectReferenceValue = steam;
         cmSo.ApplyModifiedPropertiesWithoutUndo();
 

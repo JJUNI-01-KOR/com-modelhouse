@@ -15,16 +15,25 @@ using UnityEngine;
 ///
 /// 이벤트: ZoneVolume.Entered / Exited (static)
 ///   → ZoneInfoUI가 구독해서 정보 창 표시
-///   → 김찬중 Zone/HomeEvents와 합칠 때 여기서 HomeEvents.OnZoneEntered로 넘기면 됨
+///   → HomeEvents.OnZoneEntered / OnZoneExited로도 보냄 (ZoneLight·AutoDoor가 구독)
+///   → 이벤트 기록(FR-25): "방 진입" / "방 퇴실"
+///
+/// isSensorOnly: 중문 감지 영역처럼 "감지만" 하는 박스 (ZoneData 없어도 됨)
+///   → 구역 정보 창(Entered/Exited)은 안 보내고 HomeEvents만 보냄, 기록은 "감지 영역 진입/퇴실"
+/// 초기화(FR-26): HomeEvents.OnScenarioReset을 받아 재실 상태를 비움 → 다음 물리 프레임에
+///   시점이 들어 있는 구역(현관)이 다시 입실로 판정된다 (FR-26 9번)
 /// </summary>
 public class ZoneVolume : MonoBehaviour
 {
     [SerializeField] private ZoneData data;
+    [Tooltip("중문 감지 영역이면 켠다 (구역 정보 창·조명 대상 아님)")]
+    [SerializeField] private bool isSensorOnly;
 
     public static event Action<ZoneVolume> Entered;
     public static event Action<ZoneVolume> Exited;
 
     public ZoneData Data => data;
+    public bool IsSensorOnly => isSensorOnly;
     public bool IsOccupied => insideBoxes.Count > 0;
 
     // 플레이어가 지금 들어가 있는 박스들
@@ -47,8 +56,11 @@ public class ZoneVolume : MonoBehaviour
         }
 
         if (boxCount == 0) Debug.LogWarning($"[ZoneVolume] {name}: 자식에 트리거 박스가 없음", this);
-        if (data == null) Debug.LogWarning($"[ZoneVolume] {name}: ZoneData가 비어 있음", this);
+        if (data == null && !isSensorOnly) Debug.LogWarning($"[ZoneVolume] {name}: ZoneData가 비어 있음", this);
     }
+
+    private void OnEnable() => HomeEvents.OnScenarioReset += ResetZone;
+    private void OnDisable() => HomeEvents.OnScenarioReset -= ResetZone;
 
     internal void BoxEnter(Collider box)
     {
@@ -56,8 +68,10 @@ public class ZoneVolume : MonoBehaviour
         insideBoxes.Add(box);
         if (wasEmpty)
         {
-            Debug.Log($"[ZoneVolume] 입실: {DisplayName}");
-            Entered?.Invoke(this);
+            // 센서 감지 기록을 먼저 남기고 사건을 보낸다 → 기기 동작 기록이 뒤에 온다 (FR-25 2번)
+            HomeEvents.Log(DisplayName, isSensorOnly ? "감지 영역 진입" : "방 진입");
+            if (!isSensorOnly) Entered?.Invoke(this);
+            HomeEvents.RaiseZoneEntered(this);
         }
     }
 
@@ -66,16 +80,18 @@ public class ZoneVolume : MonoBehaviour
         if (!insideBoxes.Remove(box)) return;
         if (insideBoxes.Count == 0)
         {
-            Debug.Log($"[ZoneVolume] 퇴실: {DisplayName}");
-            Exited?.Invoke(this);
+            HomeEvents.Log(DisplayName, isSensorOnly ? "감지 영역 퇴실" : "방 퇴실");
+            if (!isSensorOnly) Exited?.Invoke(this);
+            HomeEvents.RaiseZoneExited(this);
         }
     }
 
-    /// <summary>초기화(FR-26)·순간이동 때 상태 비우기. 다시 겹치면 트리거가 다시 입실을 알려 줌.</summary>
+    /// <summary>초기화(FR-26)·순간이동 때 상태 비우기. 퇴실 사건은 보내지 않는다 (조명·문은 각자 초기화).
+    /// ZoneVolumeBox.OnTriggerStay가 다음 물리 프레임에 다시 입실을 알려 줌.</summary>
     public void ResetZone()
     {
         insideBoxes.Clear();
     }
 
-    private string DisplayName => data != null ? data.displayName : name;
+    public string DisplayName => data != null ? data.displayName : name;
 }

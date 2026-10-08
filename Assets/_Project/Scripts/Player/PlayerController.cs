@@ -54,6 +54,10 @@ public class PlayerController : MonoBehaviour
             cameraPivot.localPosition = new Vector3(0f, eyeHeight, 0f);
     }
 
+    // FR-26 6번: 초기화 사건을 받아 현관 시작 위치로 (ScenarioManager는 플레이어를 직접 참조하지 않음)
+    private void OnEnable() => HomeEvents.OnScenarioReset += ResetPlayer;
+    private void OnDisable() => HomeEvents.OnScenarioReset -= ResetPlayer;
+
     private void Start()
     {
         // 커서는 항상 보이고 잠그지 않음 (왼쪽 클릭은 버튼·옵션 선택용)
@@ -128,7 +132,7 @@ public class PlayerController : MonoBehaviour
     }
 
     /// <summary>
-    /// 현관 시작 위치로 이동. FR-26 초기화(ScenarioManager)에서도 호출.
+    /// 현관 시작 위치로 이동. FR-26 초기화(HomeEvents.OnScenarioReset)에서도 호출.
     /// </summary>
     public void ResetPlayer()
     {

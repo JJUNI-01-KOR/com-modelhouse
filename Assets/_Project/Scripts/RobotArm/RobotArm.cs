@@ -29,8 +29,10 @@ public static class ArmStateExtensions
 // 3) 관절마다 최대 회전 속도(moveSpeed)를 넘지 않게 목표 각도까지 움직인 뒤, 실제 자세로 미세 보정한다.
 // 4) 손끝이 목표에서 2cm 이내면 도착. 5초(ikTimeout) 안에 못 닿으면 실패.
 // Animation Rigging IK는 Transform을 직접 움직이는 방식이라 물리로 움직이는 ArticulationBody와 맞지 않아 직접 계산한다.
+// 클릭(FR-13 1번): IClickable → CursorPicker(권오민)가 5m 이내에서 강조·클릭을 보내면 HomeEvents.OnArmClicked로 알린다.
+//   로봇팔 링크의 콜라이더를 "Interactable" 레이어로 두어야 커서에 걸린다.
 [DisallowMultipleComponent]
-public class RobotArm : MonoBehaviour
+public class RobotArm : MonoBehaviour, IClickable
 {
     [Header("식별")]
     public string armId = "coffee-arm";
@@ -62,6 +64,15 @@ public class RobotArm : MonoBehaviour
     [Header("충돌")]
     [Tooltip("로봇팔이 부딪히지 않고 지나갈 레이어 (식탁·커피 머신이 있는 레이어)")]
     [SerializeField] LayerMask passThroughLayers = 1;
+
+    [Header("클릭 강조 (FR-13 1번)")]
+    [Tooltip("커서가 올라가면 색을 이만큼 밝게 (OptionPart와 같은 방식)")]
+    [SerializeField] float highlightBoost = 1.4f;
+
+    static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+    static readonly int ColorId = Shader.PropertyToID("_Color");
+    Renderer[] highlightRenderers;
+    MaterialPropertyBlock mpb;
 
     // 관절 (회전 관절만, Base부터 순서대로)
     ArticulationBody[] joints;
@@ -230,6 +241,33 @@ public class RobotArm : MonoBehaviour
         for (int i = 0; i < joints.Length; i++) SetJointImmediate(i, restRad[i] * Mathf.Rad2Deg);
         yield return new WaitForFixedUpdate();
     }
+
+    // ── 클릭 (IClickable) ──
+
+    public void Highlight(bool on)
+    {
+        if (highlightRenderers == null) highlightRenderers = GetComponentsInChildren<Renderer>(true);
+        if (mpb == null) mpb = new MaterialPropertyBlock();
+        foreach (Renderer r in highlightRenderers)
+        {
+            if (r == null) continue;
+            Material[] mats = r.sharedMaterials;
+            for (int i = 0; i < mats.Length; i++)
+            {
+                mpb.Clear();
+                Material m = mats[i];
+                if (on && m != null)
+                {
+                    if (m.HasProperty(BaseColorId)) mpb.SetColor(BaseColorId, m.GetColor(BaseColorId) * highlightBoost);
+                    else if (m.HasProperty(ColorId)) mpb.SetColor(ColorId, m.GetColor(ColorId) * highlightBoost);
+                }
+                r.SetPropertyBlock(mpb, i);   // 빈 블록 = 강조 지우기
+            }
+        }
+    }
+
+    // 작업 중 다시 클릭하면 CoffeeTask가 무시한다 (FR-13 예외)
+    public void OnClick() => HomeEvents.RaiseArmClicked(this);
 
     // ── 공개 동작 (클래스 다이어그램 RobotArm) ──
 
