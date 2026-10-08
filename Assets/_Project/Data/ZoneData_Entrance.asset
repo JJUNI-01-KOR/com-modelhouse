@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ZoneData
   zoneId: entrance
   displayName: "\uD604\uAD00"
-  area: 0
-  direction: "(\uC785\uB825)"
-  feature: "(\uC785\uB825)"
+  area: 4.8
+  direction: "\uBD81\uD5A5"
+  feature: "\uCCB4\uD5D8 \uC2DC\uC791 \uC704\uCE58, \uC2E0\uBC1C\uC7A5 \uC218\uB0A9"
   luxFactor: 0.3
