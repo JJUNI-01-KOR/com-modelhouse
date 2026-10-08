@@ -1,0 +1,30 @@
+# Unity 자동 생성 폴더
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Bb]uild/
+/[Bb]uilds/
+/[Mm]emoryCaptures/
+/[Rr]ecordings/
+
+# IDE 자동 생성 파일
+/.vs/
+/.idea/
+*.csproj
+*.sln
+*.slnx
+*.user
+*.pidb
+*.VC.db
+
+# 외부 에셋: 각자 Import
+/Assets/ThirdParty/
+/Assets/ThirdParty.meta
+/Assets/Zeps3D/
+/Assets/Zeps3D.meta
+
+# OS 파일
+.DS_Store
+Thumbs.db

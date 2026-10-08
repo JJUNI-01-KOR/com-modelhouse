@@ -1,7 +1,7 @@
 # 모델하우스 컨피규레이터
 
 > Asset Store 에셋 Modern Apartment로 꾸민 개방형 아파트를 1인칭으로 걸으며, 기본 에셋에서 벽지·바닥재·주방 상판과 소파·러그·그림·화분을 바꾸면 추가 비용이 붙는 Unity 컨피규레이터.
-> 시계 바늘을 돌려 시간대별 햇빛과 실내 조도를 보고, 주방의 커피 로봇팔이 컵을 커피 머신에 놓았다가 식탁으로 가져다준다.
+> 시계 바늘을 돌려 시간대별 햇빛과 실내 조도를 보고, 상호작용 창으로 주방의 커피 로봇팔을 움직이면 로봇팔이 컵을 들고 커피 머신 추출구 아래에서 커피를 받은 뒤 식탁에 놓는다.
 
 <!-- 시연 영상: 10/14 추가 -->
 <!-- [![시연 영상](docs/images/thumbnail.png)](유튜브 링크) -->
@@ -15,7 +15,7 @@
 | 언어 | C# |
 | 공간 에셋 | [Modern Apartment](https://assetstore.unity.com/packages/3d/props/interior/modern-apartment-375248) (Zeps3D, $16.99, URP 전용) — 저장소에 포함하지 않음, 각자 구매 후 Import |
 | 플랫폼 | Windows 10/11 (64비트) |
-| 요구사항 | [SRS v1.7](docs/SRS_COM_v1.7.docx) — 20개 (Must 16, Should 1, Could 3) |
+| 요구사항 | [SRS v1.9](docs/SRS_COM_v1.9.docx) — 상위 20개 (Must 15, Should 3, Could 2) |
 
 ---
 
@@ -32,11 +32,11 @@
 
 - [ ] 1인칭 이동과 구역 정보 표시 (현관·거실·주방·침실) — FR-01, FR-02
 - [ ] 부분 클릭 옵션: 벽·바닥·주방 상판·소파·러그·그림·화분을 클릭하면 옵션 목록 — FR-03
-- [ ] 옵션 적용과 기본 대비 추가 비용 합계 — FR-29, FR-31
+- [ ] 옵션 적용(파트 7개)과 기본 대비 추가 비용 합계 — FR-29-01 ~ FR-29-07, FR-31
 - [ ] 시계: 시침을 끌어 1시간 단위로 시각 변경 → 햇빛·하늘·조도(lx) 변경 — FR-30
-- [ ] 재실 감지 조명, 중문 자동 개폐, 웰컴 음성 — FR-04, FR-05, FR-07, FR-08
+- [ ] 입구 통과 기반 재실 감지 조명, 중문 자동 개폐 — FR-04, FR-05, FR-07 (웰컴 음성 FR-08은 Should)
 - [ ] 좌측 상단 메뉴 [옵션] [기록] [초기화] — FR-11
-- [ ] 커피 로봇: 식탁 컵 → 커피 머신(5초 추출) → 식탁 — FR-13, FR-15
+- [ ] 커피 로봇: 컵 집기 → 커피 머신 추출구 아래에서 컵을 든 채로 커피 받기(5초) → 식탁에 놓기 — FR-13, FR-15
 - [ ] 로봇팔 상호작용 창 [커피 만들기] [직접 조종] — FR-34 (직접 조종 FR-33은 Should)
 - [ ] 이벤트 기록(밀리초), 초기화(고른 옵션은 유지) — FR-25, FR-26
 
@@ -60,7 +60,7 @@
 | --- | --- |
 | W A S D | 이동 (바라보는 방향 기준) |
 | 마우스 오른쪽 버튼 누른 채 끌기 | 시점 회전 |
-| 마우스 왼쪽 클릭 | 버튼, 옵션 부분(옵션 목록), 식탁 컵(커피 주문), 로봇팔·커피 머신(상호작용 창) |
+| 마우스 왼쪽 클릭 | 버튼, 옵션 부분(옵션 목록), 로봇팔·커피 머신·컵(상호작용 창) |
 | 좌측 상단 메뉴 | [옵션] [기록] [초기화] |
 | 우측 상단 시계 | 시침을 끌어 시각 변경 |
 
@@ -74,7 +74,7 @@
 flowchart LR
   subgraph 발행
     CS["ConfigurationState<br/>옵션 · 추가 비용 합계"]
-    Zone["Zone<br/>재실 센서"]
+    Zone["Zone<br/>입구 통과 재실 센서"]
     SM[ScenarioManager]
   end
   HE(("HomeEvents"))
@@ -88,7 +88,7 @@ flowchart LR
   Zone --> HE
   SM --> HE
   HE --> OP & HUD & EL & RA
-  UI["PanelUI · CursorPicker · InteractionPanelUI"] -.->|커피 주문·직접 조종| RA
+  UI["PanelUI · CursorPicker · InteractionPanelUI"] -.->|커피 만들기·직접 조종| RA
   UI -.->|옵션 선택| CS
   UI -.->|초기화| SM
   CL[ClockUI] -.->|시각| TD["TimeOfDayController<br/>햇빛 · 조도"]
@@ -121,11 +121,11 @@ Assets/ThirdParty/ Asset Store 에셋 (.gitignore로 제외)
 
 1. GitHub에서 빈 저장소 `com-modelhouse` 생성 (README, .gitignore 추가 체크 해제)
 2. Unity Hub → Unity `6000.4.0f1` 설치 → New project → **Universal 3D** → 이름 `com-modelhouse`
-3. 이 README, `.gitignore`, `.gitattributes`를 프로젝트 루트(`Assets` 폴더 옆)에 복사, `docs/SRS_COM_v1.7.docx` 추가
-4. Unity `6000.4.0f1` 버전 관리 설정: **Edit → Project Settings**
-   - 왼쪽 목록의 **Version Control** → Mode: **Visible Meta Files**
-   - 왼쪽 목록의 **Editor** → Asset Serialization → Mode: **Force Text** (기본값이면 유지)
-   - **Version Control은 Editor 내부가 아닌 별도 메뉴**다.
+3. 이 README, `.gitignore`, `.gitattributes`를 프로젝트 루트(`Assets` 폴더 옆)에 복사, `docs/SRS_COM_v1.9.docx` 추가
+4. 버전 관리 설정: **Edit → Project Settings**
+   - 왼쪽 목록의 **Version Control** → Mode: **Visible Meta Files** (Unity 6에서는 이게 기본값이라 이미 선택돼 있으면 그대로 둔다)
+   - 왼쪽 목록의 **Editor** → Asset Serialization → Mode: **Force Text** (기본값이면 그대로 둔다)
+   - Version Control은 Editor 안이 아니라 Project Settings 왼쪽 목록에 따로 있는 항목이다
 5. Window → Package Manager → Input System, Cinemachine, ProBuilder, Animation Rigging 설치
 6. Asset Store에서 **Modern Apartment**(Zeps3D)를 각자 구매 → Package Manager → My Assets → Import, Project 창에서 `Assets/Zeps3D`를 `Assets/ThirdParty/` 아래로 옮김
    - 데모 씬 라이트맵은 우리 씬에서 다시 굽는다
@@ -161,7 +161,7 @@ Unity Hub → Add → Add project from disk → 클론한 폴더 선택 (Unity `
 | 항목 | 규칙 | 예 |
 | --- | --- | --- |
 | 브랜치 | `main`은 항상 실행되는 상태. 기능은 `feature/이름-기능`에서 작업 후 PR | `feature/chanjung-coffee-robot` |
-| 커밋 | `타입: FR번호 한 줄 요약` (feat, fix, refactor, docs, chore) | `feat: FR-13 커피 로봇 컵 옮기기` |
+| 커밋 | `타입: FR번호 한 줄 요약` (feat, fix, refactor, docs, chore) | `feat: FR-13 커피 로봇 컵 들고 커피 받기` |
 | 리뷰 | PR은 상대방이 리뷰 후 머지. 오너가 설명하지 못하는 코드는 미완성 | |
 | 씬 | `Main.unity`는 권오민만 수정. 김찬중은 프리팹·`Test_RobotArm.unity`에서 작업 | |
 | 마감 | 매일 19:00 기록 공유 전에 PR 머지 | |
@@ -177,7 +177,7 @@ Unity Hub → Add → Add project from disk → 클론한 폴더 선택 (Unity `
 | 10/6 (화) | 기획·설계 | 기획서, 클래스 설계, SRS |
 | 10/7 (수) | 에셋·씬 구축 | Modern Apartment 임포트, 4구역, 조명 굽기, 로봇팔 리그, 빈 스크립트 |
 | 10/8 (목) | 기능 구현 1 | 핵심 3개: 1인칭 이동, 벽지 옵션 바꾸기, 커피 로봇 |
-| 10/12 (월) | 기능 구현 2 | Must 16개 전부 동작 (MVP), 팀 간 플레이테스트 |
+| 10/12 (월) | 기능 구현 2 | Must 15개 전부 동작 (MVP), 팀 간 플레이테스트 |
 | 10/13 (화) | 폴리싱·빌드 | 12:30 기능 동결, 빌드 테스트 1 |
 | 10/14 (수) | 발표 | 빌드 테스트 2, README·시연 영상, 발표, 회고 |
 
