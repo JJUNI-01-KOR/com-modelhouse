@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: OptionCatalog
   m_EditorClassIdentifier: Assembly-CSharp::OptionCatalog
   items:
-  - optionId: floor_oak
+  - optionId: floor_wood
     part: 1
     displayName: "\uC6D0\uBAA9 \uB9C8\uB8E8"
     useColor: 1
@@ -23,9 +23,9 @@ MonoBehaviour:
     preview: {fileID: 0}
     extraCost: 0
     isDefault: 1
-  - optionId: floor_light
+  - optionId: floor_kang
     part: 1
-    displayName: "\uBC1D\uC740 \uAC15\uB9C8\uB8E8"
+    displayName: "\uAC15\uB9C8\uB8E8"
     useColor: 1
     color: {r: 0.894118, g: 0.505882, b: 0.12549, a: 1}
     material: {fileID: 0}
@@ -33,15 +33,25 @@ MonoBehaviour:
     preview: {fileID: 0}
     extraCost: 1500000
     isDefault: 0
-  - optionId: floor_marble
+  - optionId: floor_navy
     part: 1
-    displayName: "\uB300\uB9AC\uC11D \uD0C0\uC77C"
+    displayName: "\uB124\uC774\uBE44 \uB9C8\uB8E8"
     useColor: 1
-    color: {r: 0.901961, g: 0.901961, b: 0.909804, a: 1}
+    color: {r: 0.090196, g: 0.278431, b: 0.745098, a: 1}
     material: {fileID: 0}
     prefab: {fileID: 0}
     preview: {fileID: 0}
     extraCost: 3200000
+    isDefault: 0
+  - optionId: floor_red
+    part: 1
+    displayName: "\uB808\uB4DC \uD3EC\uC778\uD2B8"
+    useColor: 1
+    color: {r: 0.92549, g: 0, b: 0, a: 1}
+    material: {fileID: 0}
+    prefab: {fileID: 0}
+    preview: {fileID: 0}
+    extraCost: 1000000
     isDefault: 0
   - optionId: wall_white
     part: 0
@@ -55,7 +65,7 @@ MonoBehaviour:
     isDefault: 1
   - optionId: wall_greige
     part: 0
-    displayName: "\uADF8\uB808\uC774\uC9C0 \uC2E4\uD06C \uBCBD\uC9C0"
+    displayName: "\uADF8\uB808\uC774\uC9C0"
     useColor: 1
     color: {r: 0.741176, g: 0.709804, b: 0.65098, a: 1}
     material: {fileID: 0}
@@ -65,7 +75,7 @@ MonoBehaviour:
     isDefault: 0
   - optionId: wall_sage
     part: 0
-    displayName: "\uC138\uC774\uC9C0 \uADF8\uB9B0 \uC2E4\uD06C \uBCBD\uC9C0"
+    displayName: "\uC138\uC774\uC9C0 \uADF8\uB9B0"
     useColor: 1
     color: {r: 0.639216, g: 0.694118, b: 0.541176, a: 1}
     material: {fileID: 0}
@@ -75,7 +85,7 @@ MonoBehaviour:
     isDefault: 0
   - optionId: wall_fabric
     part: 0
-    displayName: "\uD328\uBE0C\uB9AD \uC9C8\uAC10 \uBCBD\uC9C0"
+    displayName: "\uD328\uBE0C\uB9AD \uBCA0\uC774\uC9C0"
     useColor: 1
     color: {r: 0.85098, g: 0.811765, b: 0.756863, a: 1}
     material: {fileID: 0}
@@ -145,7 +155,7 @@ MonoBehaviour:
     isDefault: 1
   - optionId: rug_beige
     part: 4
-    displayName: "\uBCA0\uC774\uC9C0 \uC6B8 \uB7EC\uADF8"
+    displayName: "\uBCA0\uC774\uC9C0"
     useColor: 1
     color: {r: 0.85098, g: 0.780392, b: 0.65098, a: 1}
     material: {fileID: 0}
@@ -155,7 +165,7 @@ MonoBehaviour:
     isDefault: 0
   - optionId: rug_charcoal
     part: 4
-    displayName: "\uCC28\uCF5C \uB7EC\uADF8"
+    displayName: "\uCC28\uCF5C"
     useColor: 1
     color: {r: 0.219608, g: 0.227451, b: 0.239216, a: 1}
     material: {fileID: 0}
@@ -166,60 +176,60 @@ MonoBehaviour:
   - optionId: painting_default
     part: 5
     displayName: "\uB370\uBAA8 \uC52C \uADF8\uB9BC"
-    useColor: 0
+    useColor: 1
     color: {r: 1, g: 1, b: 1, a: 1}
     material: {fileID: 0}
     prefab: {fileID: 0}
     preview: {fileID: 0}
     extraCost: 0
     isDefault: 1
-  - optionId: painting_2
+  - optionId: painting_warm
     part: 5
-    displayName: "\uADF8\uB9BC \uC561\uC790 2"
-    useColor: 0
-    color: {r: 1, g: 1, b: 1, a: 1}
+    displayName: "\uC6DC \uD1A4"
+    useColor: 1
+    color: {r: 0.890196, g: 0.780392, b: 0.631373, a: 1}
     material: {fileID: 0}
-    prefab: {fileID: 3420734742793837697, guid: 47bc8215686d2b3419485ee53d3d3095, type: 3}
+    prefab: {fileID: 0}
     preview: {fileID: 0}
     extraCost: 150000
     isDefault: 0
-  - optionId: painting_3
+  - optionId: painting_cool
     part: 5
-    displayName: "\uADF8\uB9BC \uC561\uC790 3"
-    useColor: 0
-    color: {r: 1, g: 1, b: 1, a: 1}
+    displayName: "\uCFE8 \uD1A4"
+    useColor: 1
+    color: {r: 0.654902, g: 0.745098, b: 0.839216, a: 1}
     material: {fileID: 0}
-    prefab: {fileID: 2681100486007162551, guid: 6cbba7acfa55f0d48a456e0e3c2531a7, type: 3}
+    prefab: {fileID: 0}
     preview: {fileID: 0}
     extraCost: 150000
     isDefault: 0
   - optionId: plant_default
     part: 6
     displayName: "\uB370\uBAA8 \uC52C \uD654\uBD84"
-    useColor: 0
+    useColor: 1
     color: {r: 1, g: 1, b: 1, a: 1}
     material: {fileID: 0}
     prefab: {fileID: 0}
     preview: {fileID: 0}
     extraCost: 0
     isDefault: 1
-  - optionId: plant_fern
+  - optionId: plant_terracotta
     part: 6
-    displayName: "\uACE0\uC0AC\uB9AC \uD654\uBD84"
-    useColor: 0
-    color: {r: 1, g: 1, b: 1, a: 1}
+    displayName: "\uD14C\uB77C\uCF54\uD0C0"
+    useColor: 1
+    color: {r: 0.760784, g: 0.411765, b: 0.243137, a: 1}
     material: {fileID: 0}
-    prefab: {fileID: 4101373314610151730, guid: 03cb78ef606bbcc4d8cee14e028d8b60, type: 3}
+    prefab: {fileID: 0}
     preview: {fileID: 0}
     extraCost: 80000
     isDefault: 0
-  - optionId: plant_broadleaf
+  - optionId: plant_charcoal
     part: 6
-    displayName: "\uB113\uC740\uC78E \uD654\uBD84"
-    useColor: 0
-    color: {r: 1, g: 1, b: 1, a: 1}
+    displayName: "\uCC28\uCF5C"
+    useColor: 1
+    color: {r: 0.239216, g: 0.239216, b: 0.239216, a: 1}
     material: {fileID: 0}
-    prefab: {fileID: 5164685413678202724, guid: 5781c467895aa084d8faf7aaf411f975, type: 3}
+    prefab: {fileID: 0}
     preview: {fileID: 0}
     extraCost: 80000
     isDefault: 0

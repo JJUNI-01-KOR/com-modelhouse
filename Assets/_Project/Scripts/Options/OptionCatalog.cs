@@ -20,8 +20,6 @@ public static class PartTypeExtensions
             default: return part.ToString();
         }
     }
-
-    public static bool IsMaterialPart(this PartType part) => part != PartType.Painting && part != PartType.Plant;
 }
 
 public static class OptionItemExtensions

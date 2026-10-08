@@ -79,7 +79,7 @@ public class ConfigurationState : MonoBehaviour
 
     // ── UI 없이 시험하기 (Play 중 컴포넌트 ⋮ 메뉴) ──
     [Header("테스트")]
-    [Tooltip("예: wall_greige, floor_marble, sofa_navy")]
+    [Tooltip("예: wall_greige, floor_navy, sofa_navy")]
     [SerializeField] string testOptionId = "wall_greige";
 
     [ContextMenu("테스트: testOptionId 옵션 선택")]
