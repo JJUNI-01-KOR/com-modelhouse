@@ -1,0 +1,183 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c3ea558fab659214f8a1abfe268a5faa, type: 3}
+  m_Name: OptionCatalog
+  m_EditorClassIdentifier: Assembly-CSharp::OptionCatalog
+  items:
+  - optionId: floor_oak
+    part: 1
+    displayName: "\uC6D0\uBAA9 \uB9C8\uB8E8"
+    material: {fileID: 0}
+    prefab: {fileID: 0}
+    preview: {fileID: 0}
+    extraCost: 0
+    isDefault: 1
+  - optionId: floor_light
+    part: 1
+    displayName: "\uBC1D\uC740 \uAC15\uB9C8\uB8E8"
+    material: {fileID: 2100000, guid: 9c03abe9dc8aeac47ac3860a8d5aa92a, type: 2}
+    prefab: {fileID: 0}
+    preview: {fileID: 0}
+    extraCost: 1500000
+    isDefault: 0
+  - optionId: floor_marble
+    part: 1
+    displayName: "\uB300\uB9AC\uC11D \uD0C0\uC77C"
+    material: {fileID: 2100000, guid: 3b79d4e2278bb364886158e7c42b263b, type: 2}
+    prefab: {fileID: 0}
+    preview: {fileID: 0}
+    extraCost: 3200000
+    isDefault: 0
+  - optionId: wall_white
+    part: 0
+    displayName: "\uD654\uC774\uD2B8 \uD398\uC778\uD2B8"
+    material: {fileID: 0}
+    prefab: {fileID: 0}
+    preview: {fileID: 0}
+    extraCost: 0
+    isDefault: 1
+  - optionId: wall_greige
+    part: 0
+    displayName: "\uADF8\uB808\uC774\uC9C0 \uC2E4\uD06C \uBCBD\uC9C0"
+    material: {fileID: 2100000, guid: 68872431783f5a7419a6c3b762cb6e4f, type: 2}
+    prefab: {fileID: 0}
+    preview: {fileID: 0}
+    extraCost: 400000
+    isDefault: 0
+  - optionId: wall_sage
+    part: 0
+    displayName: "\uC138\uC774\uC9C0 \uADF8\uB9B0 \uC2E4\uD06C \uBCBD\uC9C0"
+    material: {fileID: 2100000, guid: 4c1eb45568ae2534f882e968704b7611, type: 2}
+    prefab: {fileID: 0}
+    preview: {fileID: 0}
+    extraCost: 400000
+    isDefault: 0
+  - optionId: wall_fabric
+    part: 0
+    displayName: "\uD328\uBE0C\uB9AD \uC9C8\uAC10 \uBCBD\uC9C0"
+    material: {fileID: 2100000, guid: 9af5b919ce1ddaa45a82d7ba8ea04b7c, type: 2}
+    prefab: {fileID: 0}
+    preview: {fileID: 0}
+    extraCost: 700000
+    isDefault: 0
+  - optionId: counter_white
+    part: 2
+    displayName: "\uD654\uC774\uD2B8 \uC0C1\uD310"
+    material: {fileID: 0}
+    prefab: {fileID: 0}
+    preview: {fileID: 0}
+    extraCost: 0
+    isDefault: 1
+  - optionId: counter_darkstone
+    part: 2
+    displayName: "\uB2E4\uD06C \uC2A4\uD1A4"
+    material: {fileID: 2100000, guid: 2f45320249b0b9448a5c3486ab060545, type: 2}
+    prefab: {fileID: 0}
+    preview: {fileID: 0}
+    extraCost: 1800000
+    isDefault: 0
+  - optionId: sofa_white
+    part: 3
+    displayName: "\uD654\uC774\uD2B8"
+    material: {fileID: 0}
+    prefab: {fileID: 0}
+    preview: {fileID: 0}
+    extraCost: 0
+    isDefault: 1
+  - optionId: sofa_warmgray
+    part: 3
+    displayName: "\uC6DC \uADF8\uB808\uC774"
+    material: {fileID: 2100000, guid: 1e9db67b9d9b5e04f88500b608e67c8c, type: 2}
+    prefab: {fileID: 0}
+    preview: {fileID: 0}
+    extraCost: 300000
+    isDefault: 0
+  - optionId: sofa_navy
+    part: 3
+    displayName: "\uB124\uC774\uBE44"
+    material: {fileID: 2100000, guid: 788fe2d283174614fbabed15738980e1, type: 2}
+    prefab: {fileID: 0}
+    preview: {fileID: 0}
+    extraCost: 300000
+    isDefault: 0
+  - optionId: rug_default
+    part: 4
+    displayName: "\uB370\uBAA8 \uC52C \uB7EC\uADF8"
+    material: {fileID: 0}
+    prefab: {fileID: 0}
+    preview: {fileID: 0}
+    extraCost: 0
+    isDefault: 1
+  - optionId: rug_beige
+    part: 4
+    displayName: "\uBCA0\uC774\uC9C0 \uC6B8 \uB7EC\uADF8"
+    material: {fileID: 2100000, guid: 79a1beb70f251bf448e35a0c2169b562, type: 2}
+    prefab: {fileID: 0}
+    preview: {fileID: 0}
+    extraCost: 250000
+    isDefault: 0
+  - optionId: rug_charcoal
+    part: 4
+    displayName: "\uCC28\uCF5C \uB7EC\uADF8"
+    material: {fileID: 2100000, guid: 62f29bb925a7fa94f8cf50f92bcef3e4, type: 2}
+    prefab: {fileID: 0}
+    preview: {fileID: 0}
+    extraCost: 250000
+    isDefault: 0
+  - optionId: painting_default
+    part: 5
+    displayName: "\uB370\uBAA8 \uC52C \uADF8\uB9BC"
+    material: {fileID: 0}
+    prefab: {fileID: 0}
+    preview: {fileID: 0}
+    extraCost: 0
+    isDefault: 1
+  - optionId: painting_2
+    part: 5
+    displayName: "\uADF8\uB9BC \uC561\uC790 2"
+    material: {fileID: 0}
+    prefab: {fileID: 3420734742793837697, guid: 47bc8215686d2b3419485ee53d3d3095, type: 3}
+    preview: {fileID: 0}
+    extraCost: 150000
+    isDefault: 0
+  - optionId: painting_3
+    part: 5
+    displayName: "\uADF8\uB9BC \uC561\uC790 3"
+    material: {fileID: 0}
+    prefab: {fileID: 2681100486007162551, guid: 6cbba7acfa55f0d48a456e0e3c2531a7, type: 3}
+    preview: {fileID: 0}
+    extraCost: 150000
+    isDefault: 0
+  - optionId: plant_default
+    part: 6
+    displayName: "\uB370\uBAA8 \uC52C \uD654\uBD84"
+    material: {fileID: 0}
+    prefab: {fileID: 0}
+    preview: {fileID: 0}
+    extraCost: 0
+    isDefault: 1
+  - optionId: plant_fern
+    part: 6
+    displayName: "\uACE0\uC0AC\uB9AC \uD654\uBD84"
+    material: {fileID: 0}
+    prefab: {fileID: 4101373314610151730, guid: 03cb78ef606bbcc4d8cee14e028d8b60, type: 3}
+    preview: {fileID: 0}
+    extraCost: 80000
+    isDefault: 0
+  - optionId: plant_broadleaf
+    part: 6
+    displayName: "\uB113\uC740\uC78E \uD654\uBD84"
+    material: {fileID: 0}
+    prefab: {fileID: 5164685413678202724, guid: 5781c467895aa084d8faf7aaf411f975, type: 3}
+    preview: {fileID: 0}
+    extraCost: 80000
+    isDefault: 0
