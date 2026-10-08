@@ -7,8 +7,8 @@ using UnityEngine;
 // - 3초 안에 재진입: 연 채로 둠 / 닫히는 중 재진입: 멈추고 다시 열기
 public class AutoDoor : MonoBehaviour
 {
-    [Tooltip("중문 감지 영역 (Zone에서 isSensorOnly 켜기)")]
-    [SerializeField] Zone zone;
+    [Tooltip("중문 감지 영역 (ZoneVolume에서 Is Sensor Only 켜기)")]
+    [SerializeField] ZoneVolume zone;
     [SerializeField] string doorName = "중문";
     [Tooltip("미닫이 문짝")]
     [SerializeField] Transform doorLeaf;
@@ -50,7 +50,7 @@ public class AutoDoor : MonoBehaviour
         HomeEvents.OnScenarioReset -= ResetDoor;
     }
 
-    void OnZoneEntered(Zone z)
+    void OnZoneEntered(ZoneVolume z)
     {
         if (z != zone) return;
         StopRoutine();
@@ -61,7 +61,7 @@ public class AutoDoor : MonoBehaviour
         }
     }
 
-    void OnZoneExited(Zone z)
+    void OnZoneExited(ZoneVolume z)
     {
         if (z != zone) return;
         StopRoutine();

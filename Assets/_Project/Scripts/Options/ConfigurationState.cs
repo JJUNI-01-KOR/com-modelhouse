@@ -44,7 +44,7 @@ public class ConfigurationState : MonoBehaviour
         foreach (OptionPart part in parts)
             if (part != null && part.part == item.part) part.Apply(item);
 
-        HomeEvents.Log(item.part.ToKorean(), $"옵션 변경 {item.displayName} ({item.CostLabel})");
+        HomeEvents.Log(item.part.ToKorean(), $"옵션 변경 {item.displayName} ({item.CostLabel()})");
         HomeEvents.RaiseOptionChanged(item);
     }
 
@@ -92,7 +92,7 @@ public class ConfigurationState : MonoBehaviour
         foreach (PartType part in System.Enum.GetValues(typeof(PartType)))
         {
             OptionItem item = GetSelected(part);
-            sb.AppendLine($"{part.ToKorean()}: {(item != null ? item.displayName + " " + item.CostLabel : "없음")}");
+            sb.AppendLine($"{part.ToKorean()}: {(item != null ? item.displayName + " " + item.CostLabel() : "없음")}");
         }
         sb.Append("추가 비용 합계: ").Append(TotalCostText);
         Debug.Log(sb.ToString());

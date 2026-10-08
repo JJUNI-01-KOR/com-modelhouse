@@ -8,7 +8,7 @@ using UnityEngine;
 // 천장 조명 Light는 Realtime 또는 Mixed여야 밝기가 바뀐다 (Baked는 안 바뀜).
 public class ZoneLight : MonoBehaviour
 {
-    [SerializeField] Zone zone;
+    [SerializeField] ZoneVolume zone;
     [Tooltip("이 구역의 천장 조명. 비우면 자식의 Light 전부")]
     [SerializeField] Light[] lights;
     [Tooltip("0이면 각 Light에 설정된 Intensity를 100%로 쓴다")]
@@ -46,7 +46,7 @@ public class ZoneLight : MonoBehaviour
         HomeEvents.OnScenarioReset -= ResetLight;
     }
 
-    void OnZoneEntered(Zone z)
+    void OnZoneEntered(ZoneVolume z)
     {
         if (z != zone) return;
         StopRoutine();                       // 꺼짐 예약 취소 또는 어두워지는 중 멈춤
@@ -55,7 +55,7 @@ public class ZoneLight : MonoBehaviour
         routine = StartCoroutine(FadeIn());
     }
 
-    void OnZoneExited(Zone z)
+    void OnZoneExited(ZoneVolume z)
     {
         if (z != zone) return;
         StopRoutine();
@@ -112,7 +112,7 @@ public class ZoneLight : MonoBehaviour
 
     public bool IsOn() => brightness > 0f;
     public float Brightness => brightness;
-    public Zone Zone => zone;
+    public ZoneVolume Zone => zone;
 
     public void ResetLight()
     {

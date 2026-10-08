@@ -1,10 +1,8 @@
-using System;
 using System.Collections.Generic;
 using System.Globalization;
 using UnityEngine;
 
-// 옵션 파트 (FR-29-01 ~ FR-29-07). 앞의 5개는 재질형, 뒤의 2개는 모델형.
-public enum PartType { Wall, Floor, Countertop, SofaFabric, Rug, Painting, Plant }
+// PartType(enum)·OptionItem(옵션 한 줄)은 권오민 Options/PartType.cs, OptionItem.cs를 쓴다.
 
 public static class PartTypeExtensions
 {
@@ -26,24 +24,11 @@ public static class PartTypeExtensions
     public static bool IsMaterialPart(this PartType part) => part != PartType.Painting && part != PartType.Plant;
 }
 
-// 옵션 하나 (부록 A-7의 한 줄)
-[Serializable]
-public class OptionItem
+public static class OptionItemExtensions
 {
-    public string optionId;
-    public PartType part;
-    public string displayName;
-    [Tooltip("재질형: 바꿀 재질. 기본 옵션은 비워 두면 에셋 원본 재질로 되돌린다")]
-    public Material material;
-    [Tooltip("모델형: 바꿀 프리팹. 기본 옵션은 비워 두면 원래 놓인 모델로 되돌린다")]
-    public GameObject prefab;
-    public Sprite preview;
-    [Tooltip("기본 에셋 대비 추가 비용 (원)")]
-    public int extraCost;
-    public bool isDefault;
-
     // 옵션 목록 표시용: "기본" 또는 "+400,000원" (FR-31 1번)
-    public string CostLabel => isDefault ? "기본" : "+" + extraCost.ToString("N0", CultureInfo.InvariantCulture) + "원";
+    public static string CostLabel(this OptionItem item)
+        => item.isDefault ? "기본" : "+" + item.extraCost.ToString("N0", CultureInfo.InvariantCulture) + "원";
 }
 
 // 옵션 목록과 가격 (부록 A-7). 메뉴 Tools → COM → 옵션 카탈로그 만들기 로 채운다.

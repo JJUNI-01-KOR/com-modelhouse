@@ -7,8 +7,8 @@ using UnityEngine;
 public static class HomeEvents
 {
     // ── 클래스 다이어그램(System 페이지)의 사건 ──
-    public static event Action<Zone> OnZoneEntered;
-    public static event Action<Zone> OnZoneExited;
+    public static event Action<ZoneVolume> OnZoneEntered;   // 구역은 ZoneVolume (권오민 2.05)
+    public static event Action<ZoneVolume> OnZoneExited;
     public static event Action<OptionPart> OnPartClicked;
     public static event Action<RobotArm> OnArmClicked;
     public static event Action<OptionItem> OnOptionChanged;
@@ -25,8 +25,8 @@ public static class HomeEvents
     // EventLogger가 아직 없을 때 Console에서 확인하려고 켜 둔다. 기록 패널이 붙으면 꺼도 된다.
     public static bool EchoToConsole = true;
 
-    public static void RaiseZoneEntered(Zone zone) => OnZoneEntered?.Invoke(zone);
-    public static void RaiseZoneExited(Zone zone) => OnZoneExited?.Invoke(zone);
+    public static void RaiseZoneEntered(ZoneVolume zone) => OnZoneEntered?.Invoke(zone);
+    public static void RaiseZoneExited(ZoneVolume zone) => OnZoneExited?.Invoke(zone);
     public static void RaisePartClicked(OptionPart part) => OnPartClicked?.Invoke(part);
     public static void RaiseArmClicked(RobotArm arm) => OnArmClicked?.Invoke(arm);
     public static void RaiseOptionChanged(OptionItem item) => OnOptionChanged?.Invoke(item);
