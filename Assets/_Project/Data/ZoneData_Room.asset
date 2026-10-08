@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ZoneData
   zoneId: room
   displayName: "\uCE68\uC2E4"
-  area: 0
-  direction: "(\uC785\uB825)"
-  feature: "(\uC785\uB825)"
+  area: 22.0
+  direction: "\uB3D9\uD5A5"
+  feature: "\uCE68\uB300\uC640 \uBD99\uBC15\uC774\uC7A5\uC774 \uC788\uB294 \uCE68\uC2E4, \uC624\uC804 \uD587\uBE5B\uC774 \uB4DC\uB294 \uCC3D"
   luxFactor: 0.6

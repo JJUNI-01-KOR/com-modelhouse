@@ -14,7 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ZoneData
   zoneId: kitchen
   displayName: "\uC8FC\uBC29"
-  area: 0
-  direction: "(\uC785\uB825)"
-  feature: "(\uC785\uB825)"
+  area: 14
+  direction: "\uB0A8\uD5A5"
+  feature: "\uBCBD \uCABD \uC870\uB9AC\uB300\uC640 \uC2F1\uD06C\uB300, \uC2DD\uD0C1,
+    \uCEE4\uD53C \uB85C\uBD07\uD314 \uC124\uCE58 \uACF5\uAC04"
   luxFactor: 1

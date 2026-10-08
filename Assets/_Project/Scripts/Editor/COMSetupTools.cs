@@ -257,6 +257,77 @@ public static class COMSetupTools
         ("floor_red",    "레드 포인트",      "#EC0000", 1000000, false),
     };
 
+    // 상판·소파·러그: Assets/Material에 만든 5색을 세 파트 모두 선택 가능 (가격은 파트별 SRS A-7 금액)
+    private static readonly (string id, string name, string hex)[] FurniturePalette =
+    {
+        ("darkstone", "다크 스톤", "#505B5C"),
+        ("warmgray",  "웜 그레이", "#B1B3B3"),
+        ("navy",      "네이비",    "#000055"),
+        ("beige",     "베이지",    "#D4B886"),
+        ("charcoal",  "차콜",      "#323232"),
+    };
+
+    private static (string id, string name, string hex, int cost, bool isDefault)[] MakeFurnitureColors(
+        string prefix, string defaultName, int cost)
+    {
+        var list = new System.Collections.Generic.List<(string, string, string, int, bool)>
+        {
+            ($"{prefix}_default", $"{defaultName} (기본)", "#FFFFFF", 0, true)
+        };
+        foreach (var c in FurniturePalette)
+            list.Add(($"{prefix}_{c.id}", c.name, c.hex, cost, false));
+        return list.ToArray();
+    }
+
+    private static readonly (string id, string name, string hex, int cost, bool isDefault)[] CounterColors =
+        MakeFurnitureColors("counter", "화이트 상판", 1800000);
+    private static readonly (string id, string name, string hex, int cost, bool isDefault)[] SofaColors =
+        MakeFurnitureColors("sofa", "화이트", 300000);
+    private static readonly (string id, string name, string hex, int cost, bool isDefault)[] RugColors =
+        MakeFurnitureColors("rug", "기본 러그", 250000);
+
+    [MenuItem("COM/8. 상판·소파·러그 옵션 추가")]
+    private static void AddFurnitureOptions()
+    {
+        OptionPanelUI panel = Object.FindAnyObjectByType<OptionPanelUI>(FindObjectsInactive.Include);
+        if (panel == null)
+        {
+            EditorUtility.DisplayDialog("COM", "OptionPanelUI가 씬에 없어. 먼저 5번으로 UI를 만들어 줘.", "확인");
+            return;
+        }
+
+        OptionPart counter = EnsureColorPart("Option_Countertop", PartType.Countertop, "m_countertop", null);
+        OptionPart sofa    = EnsureColorPart("Option_Sofa", PartType.SofaFabric, "m_white_fabric", "sm_coach");
+        OptionPart rug     = EnsureColorPart("Option_Rug", PartType.Rug, "m_carpet", "sm_carpet");
+        if (counter == null || sofa == null || rug == null) return;
+
+        Undo.RecordObject(panel, "COM Furniture Options");
+        var o = new SerializedObject(panel);
+        SerializedProperty entries = o.FindProperty("entries");
+        AddOrUpdateEntry(entries, "주방 상판", PartType.Countertop, counter, CounterColors);
+        AddOrUpdateEntry(entries, "소파", PartType.SofaFabric, sofa, SofaColors);
+        AddOrUpdateEntry(entries, "러그", PartType.Rug, rug, RugColors);
+        o.ApplyModifiedProperties();
+        EditorUtility.SetDirty(panel);
+        Debug.Log("[COM] 상판·소파·러그 옵션 추가 완료. Console의 '제외한 것' 목록 확인!");
+    }
+
+    private static void AddOrUpdateEntry(SerializedProperty entries, string label, PartType type, OptionPart target,
+                                         (string id, string name, string hex, int cost, bool isDefault)[] colors)
+    {
+        for (int i = 0; i < entries.arraySize; i++)
+        {
+            SerializedProperty e = entries.GetArrayElementAtIndex(i);
+            if (e.FindPropertyRelative("part").enumValueIndex == (int)type)
+            {
+                FillEntry(e, label, type, target, colors);
+                return;
+            }
+        }
+        entries.arraySize++;
+        FillEntry(entries.GetArrayElementAtIndex(entries.arraySize - 1), label, type, target, colors);
+    }
+
     [MenuItem("COM/5. 옵션 UI 만들기 (메뉴·옵션 패널·구역 정보 창)")]
     private static void BuildUI()
     {
@@ -402,6 +473,9 @@ public static class COMSetupTools
             string label = e.FindPropertyRelative("label").stringValue;
             if (type == PartType.Wall) FillEntry(e, label, type, target, WallColors);
             else if (type == PartType.Floor) FillEntry(e, label, type, target, FloorColors);
+            else if (type == PartType.Countertop) FillEntry(e, label, type, target, CounterColors);
+            else if (type == PartType.SofaFabric) FillEntry(e, label, type, target, SofaColors);
+            else if (type == PartType.Rug) FillEntry(e, label, type, target, RugColors);
         }
         o.ApplyModifiedProperties();
         EditorUtility.SetDirty(panel);
@@ -463,9 +537,12 @@ public static class COMSetupTools
         foreach (Renderer r in Object.FindObjectsByType<Renderer>())
         {
             if (System.Array.IndexOf(r.sharedMaterials, mat) < 0) continue;
-            if (!r.name.StartsWith(namePrefix)) { skipped.Add(r.name); continue; }
+            if (!MatchPrefix(r.name, namePrefix)) { skipped.Add(r.name); continue; }
             targets.Add(r);
             if (layer >= 0) { Undo.RecordObject(r.gameObject, "COM UI"); r.gameObject.layer = layer; }
+            // 클릭(레이캐스트)되려면 충돌체가 필요
+            if (r.GetComponent<Collider>() == null && r.GetComponent<MeshFilter>() != null)
+                Undo.AddComponent<MeshCollider>(r.gameObject);
         }
         SerializedProperty arr = so.FindProperty("renderers");
         arr.arraySize = targets.Count;
@@ -474,6 +551,14 @@ public static class COMSetupTools
 
         Debug.Log($"[COM] {objName}: 대상 {targets.Count}개 / {matName}을 같이 쓰지만 제외한 것: {string.Join(", ", skipped)}");
         return part;
+    }
+
+    private static bool MatchPrefix(string name, string prefixes)
+    {
+        if (string.IsNullOrEmpty(prefixes)) return true;
+        foreach (string p in prefixes.Split('|'))
+            if (name.StartsWith(p)) return true;
+        return false;
     }
 
     private static void FillEntry(SerializedProperty e, string label, PartType type, OptionPart target,
