@@ -24,10 +24,18 @@ public static class ArmStateExtensions
 }
 
 // ArticulationBody 6축 로봇팔 + IK (FR-15, TC-18)
+// ★ 이동 방식 (공장 로봇처럼 정해진 패턴, 매번 똑같이 움직임)
+//   GoToRoutine(목표, 손 방향, 들어갈 방향):
+//     ① 물러나기: 지난번 들어온 길을 거꾸로 직선으로 (컵 위로 / 머신 앞으로) → 안전 높이
+//     ② 운반 자세: 팔을 밑동 가까이 높게 접는다 (조인트 1은 그대로)
+//     ③ 조인트 1만 회전: 목표 방향을 본다 (접힌 채라 아무것도 안 쓸고 지나감)
+//     ④ 목표 위 안전 높이로 팔을 편다
+//     ⑤ 직선으로 들어간다 (컵·받침대는 위에서 아래로, 머신은 앞에서 수평으로)
+//   GoHomeRoutine: ① → ② → ③ → 일자 홈
 // 1) 시작할 때 관절 구조를 읽어 계산용 모델을 만든다.
 // 2) MoveTo: 모델에서 감쇠 최소제곱(DLS) IK로 목표 관절 각도를 먼저 구한다. 못 구하면 바로 실패(팔이 안 닿음).
 // 3) 관절마다 최대 회전 속도(moveSpeed)를 넘지 않게 목표 각도까지 움직인 뒤, 실제 자세로 미세 보정한다.
-// 4) 손끝이 목표에서 2cm 이내면 도착. 5초(ikTimeout) 안에 못 닿으면 실패.
+// 4) 손끝이 목표에서 2cm 이내면 도착. 1초 동안 실제 자세로 미세 보정.
 // Animation Rigging IK는 Transform을 직접 움직이는 방식이라 물리로 움직이는 ArticulationBody와 맞지 않아 직접 계산한다.
 // 클릭(FR-13 1번): IClickable → CursorPicker(권오민)가 5m 이내에서 강조·클릭을 보내면 HomeEvents.OnArmClicked로 알린다.
 //   로봇팔 링크의 콜라이더를 "Interactable" 레이어로 두어야 커서에 걸린다.
@@ -48,11 +56,54 @@ public class RobotArm : MonoBehaviour, IClickable
     [SerializeField] Transform ikTarget;
     [Tooltip("홈 자세 관절 각도(도), Base부터 순서대로. 비우면 시작 자세가 홈")]
     [SerializeField] float[] homeAnglesDeg = new float[0];
+    [Tooltip("홈 각도가 비어 있으면 어깨 위로 팔을 접은 준비 자세를 자동으로 홈으로 쓴다")]
+    [SerializeField] bool autoReadyHome = true;
+    [Tooltip("준비 자세 손끝 높이: 어깨에서 위로 (m)")]
+    [SerializeField] float readyHeight = 0.25f;
+    [Tooltip("준비 자세 손끝 거리: 어깨에서 앞으로 (m)")]
+    [SerializeField] float readyForward = 0.15f;
+    [Tooltip("들고 있는 물체(컵)를 손 각도와 상관없이 항상 똑바로 세운다")]
+    [SerializeField] bool keepHeldUpright = true;
 
     [Header("IK (FR-15)")]
+    [Tooltip("팔꿈치·손목 관절이 식탁 면(로봇을 놓은 높이)보다 이만큼 위에 있는 자세만 고른다 (m)")]
+    [SerializeField] float tableClearance = 0.03f;
+    [Tooltip("팔꿈치를 펴진 상태에서 이 각도보다 더 접지 않는다 (도). 더 접으면 아래팔이 위팔에 박힘")]
+    [SerializeField] float elbowFoldLimit = 150f;
+    [Tooltip("항상 팔꿈치 위·앞으로 뻗기·홈과 같은 손목 방향 자세만 쓴다 (관절끼리 뚫고 넘어가는 것 방지)")]
+    [SerializeField] bool lockConfiguration = true;
+
+    [Header("충돌 회피 (식탁·컵·커피 머신·로봇 자신)")]
+    [Tooltip("실제 메쉬 크기 상자로 식탁·장애물·로봇 마디끼리 겹치지 않는 자세와 경로만 고른다")]
+    [SerializeField] bool avoidCollisions = true;
+    [Tooltip("장애물을 찾을 부모들. 비우면 씬의 CoffeeStation 아래 전부(머신·컵·받침대·트레이)")]
+    [SerializeField] Transform[] obstacleRoots = new Transform[0];
+    [Tooltip("장애물 상자를 이만큼 줄여서 본다 (m). 살짝 닿는 정도는 허용 → 계획 실패 방지")]
+    [SerializeField] float collisionMargin = 0.01f;
+    [Tooltip("로봇 마디끼리 검사할 때 상자를 이만큼 줄인다 (m). 관절 덮개가 겹쳐 보이는 정도는 허용")]
+    [SerializeField] float selfShrink = 0.015f;
+    [Tooltip("시작(대기) 자세를 팔을 위로 곧게 세운 일자 자세로")]
+    [SerializeField] bool startStraightUp = true;
+    [Tooltip("방향이 크게 바뀌면 밑동(조인트 1)만 먼저 돌린 뒤 팔을 뻗는다")]
+    [SerializeField] bool baseFirst = true;
+    [Tooltip("밑동을 먼저 돌리는 기준 각도 (도). 이보다 작게 돌 때는 한 번에 움직임")]
+    [SerializeField] float baseFirstMinDeg = 15f;
+
+    [Header("이동 패턴 (물러나기 → 운반 자세 → 조인트1 회전 → 펴기 → 직선 진입)")]
+    [Tooltip("목표 위에서 기다리는 안전 높이: 식탁 면 위 (m). 컵·받침대·머신 물받이보다 높게")]
+    [SerializeField] float travelHeight = 0.24f;
+    [Tooltip("운반 자세 손끝 높이: 식탁 면 위 (m)")]
+    [SerializeField] float carryHeight = 0.32f;
+    [Tooltip("운반 자세 손끝 거리: 밑동 중심에서 (m). 작을수록 회전할 때 쓸고 지나가는 원이 작음")]
+    [SerializeField] float carryRadius = 0.22f;
+    [Tooltip("직선 이동을 나누는 간격 (m)")]
+    [SerializeField] float lineStep = 0.01f;
+    [Tooltip("팔이 닿는 수평 거리: 밑동 중심에서 (m). 프리팹 관절 구조로 계산하면 최대 0.65, 무리 없는 범위 0.60")]
+    [SerializeField] float reachRadius = 0.62f;
+    [Tooltip("계획한 동작이 식탁·컵·머신·팔끼리 닿으면 콘솔에 경고 (움직임은 바꾸지 않음)")]
+    [SerializeField] bool warnCollisions = true;
     [SerializeField] float reachTolerance = 0.02f;
     [SerializeField] float angleTolerance = 10f;
-    [SerializeField] float ikTimeout = 5f;
     [Tooltip("어깨에서 손끝까지 닿는 거리 (m). UR3는 팔 0.5 + 그리퍼 길이")]
     [SerializeField] float maxReach = 0.6f;
     [Tooltip("관절 최대 회전 속도 (도/초)")]
@@ -63,7 +114,7 @@ public class RobotArm : MonoBehaviour, IClickable
 
     [Header("충돌")]
     [Tooltip("로봇팔이 부딪히지 않고 지나갈 레이어 (식탁·커피 머신이 있는 레이어)")]
-    [SerializeField] LayerMask passThroughLayers = 1;
+    [SerializeField] LayerMask passThroughLayers = ~0;   // 기본: 모든 레이어 통과 (식탁·가구와 부딪히지 않음, 클릭 판정에는 영향 없음)
 
     [Header("클릭 강조 (FR-13 1번)")]
     [Tooltip("커서가 올라가면 색을 이만큼 밝게 (OptionPart와 같은 방식)")]
@@ -162,7 +213,44 @@ public class RobotArm : MonoBehaviour, IClickable
         homeDeg = new float[n];
         bool hasHome = homeAnglesDeg != null && homeAnglesDeg.Length == n;
         for (int i = 0; i < n; i++) homeDeg[i] = hasHome ? homeAnglesDeg[i] : restRad[i] * Mathf.Rad2Deg;
+
+        // 홈 각도를 안 정했으면: 시작 자세(UR3는 팔을 옆으로 쭉 뻗은 자세)는 식탁·머신에 걸리므로
+        // 어깨 위로 팔을 접어 올린 "준비 자세"를 IK로 구해 홈으로 쓴다
+        BuildCollisionModel();
+
+        if (!hasHome && startStraightUp)
+        {
+            // 일자 자세: 어깨 관절만 0°/+90°/-90° 중 손끝이 가장 높은 것 (팔 전체가 위로 곧게 선 모양)
+            float[] q = new float[n];
+            float bestY = float.MinValue; float bestShoulder = restRad[Mathf.Min(1, n - 1)];
+            foreach (float add in new[] { 0f, 90f, -90f })
+            {
+                for (int i = 0; i < n; i++) q[i] = restRad[i];
+                if (n > 1) q[1] = restRad[1] + add * Mathf.Deg2Rad;
+                ForwardKinematics(q, out Vector3 tp, out _);
+                if (tp.y > bestY + 0.01f) { bestY = tp.y; bestShoulder = q[1]; }
+            }
+            for (int i = 0; i < n; i++) homeDeg[i] = restRad[i] * Mathf.Rad2Deg;
+            if (n > 1) homeDeg[1] = bestShoulder * Mathf.Rad2Deg;
+        }
+        else if (!hasHome && autoReadyHome)
+        {
+            Vector3 shoulder = n > 1 ? JointPivotNow(1) : BasePosition;
+            Vector3 fwd = tip.position - BasePosition; fwd.y = 0f;
+            fwd = fwd.sqrMagnitude > 1e-6f ? fwd.normalized : transform.forward;
+            Vector3 readyPos = shoulder + Vector3.up * readyHeight + fwd * readyForward;
+            if (PlanIK(readyPos, Quaternion.LookRotation(fwd, Vector3.up), out float[] readyDeg))
+                homeDeg = readyDeg;
+            else
+                Debug.LogWarning("[RobotArm] 준비 자세를 못 구해 시작 자세를 홈으로 씀 (readyHeight·readyForward 조정)", this);
+        }
+        if (joints.Length >= 5)
+        {
+            float d = Mathf.DeltaAngle(restRad[4] * Mathf.Rad2Deg, homeDeg[4]);
+            refWristSign = Mathf.Abs(d) > 10f ? (int)Mathf.Sign(d) : 0;
+        }
         SnapToHome();
+        BuildCarryPose();
         ready = true;
     }
 
@@ -178,7 +266,12 @@ public class RobotArm : MonoBehaviour, IClickable
     void LateUpdate()
     {
         if (heldObject != null)
-            heldObject.SetPositionAndRotation(tip.TransformPoint(heldOffsetPos), tip.rotation * heldOffsetRot);
+        {
+            // 컵은 손 각도가 바뀌어도(식탁 25° ↔ 머신 수평) 항상 똑바로 세운다 (커피가 쏟아져 보이지 않게)
+            Quaternion rot = tip.rotation * heldOffsetRot;
+            if (keepHeldUpright) rot = Quaternion.Euler(0f, rot.eulerAngles.y, 0f);
+            heldObject.SetPositionAndRotation(tip.TransformPoint(heldOffsetPos), rot);
+        }
     }
 
     static Transform FindParentLink(ArticulationBody ab)
@@ -274,8 +367,9 @@ public class RobotArm : MonoBehaviour, IClickable
     public bool CanReach(Vector3 pos)
     {
         if (joints == null || joints.Length == 0) return false;
-        Vector3 shoulder = joints.Length > 1 ? JointPivotNow(1) : BasePosition;
-        return Vector3.Distance(shoulder, pos) <= maxReach;
+        Vector3 b = BasePosition;
+        float flat = Vector2.Distance(new Vector2(pos.x, pos.z), new Vector2(b.x, b.z));
+        return flat <= reachRadius && pos.y > transform.position.y - 0.05f;
     }
 
     // 이동을 시작한다. 팔이 닿지 않으면 false. 끝났는지는 IsMoving / LastMoveSucceeded로 본다.
@@ -286,30 +380,71 @@ public class RobotArm : MonoBehaviour, IClickable
         return true;
     }
 
+    // 지금 자리에서 목표까지 손끝을 직선으로 움직인다 (짧은 이동용).
     // 작업 코드에서는 yield return arm.MoveToRoutine(...) 후 LastMoveSucceeded를 확인한다.
     public IEnumerator MoveToRoutine(Vector3 pos, Quaternion rot)
     {
         LastMoveSucceeded = false;
         while (!ready) yield return null;
         if (!CanReach(pos)) yield break;
-
         IsMoving = true;
-        float start = Time.time;
+        var path = new List<float[]>();
+        bool ok = PlanLine(CurrentRad(), pos, rot, path);
+        if (ok) { CheckPath(path, "직선 이동"); yield return DrivePath(path); yield return FineTune(pos, rot); }
+        LastMoveSucceeded = ok;
+        IsMoving = false;
+    }
 
-        float[] goalDeg;
-        if (!PlanIK(pos, rot, out goalDeg)) { IsMoving = false; yield break; }   // 해가 없음 = 닿지 못함
+    // ── 정해진 패턴 이동 ──
+    // 지난번 들어온 길 (물러날 때 거꾸로 따라감). 0번이 목표 쪽
+    readonly List<Vector3> exitPoints = new List<Vector3>();
+    float[] carryDeg;          // 운반 자세 (조인트 1 제외하고 이 모양으로 접음)
 
-        yield return DriveJoints(goalDeg);
+    float TableY => transform.position.y;
 
-        // 실제 물리 자세 기준으로 미세 보정
-        while (true)
+    // pos/rot = 손끝 최종 목표, entryOffset = 목표에서 들어오기 직전 지점까지 (위에서 내려오면 up*거리, 머신은 -앞*거리)
+    public IEnumerator GoToRoutine(Vector3 pos, Quaternion rot, Vector3 entryOffset)
+    {
+        LastMoveSucceeded = false;
+        while (!ready) yield return null;
+        if (!CanReach(pos)) { Debug.LogWarning($"[RobotArm] 목표가 닿는 범위 밖 ({FlatDist(pos):F2}m > {reachRadius:F2}m)", this); yield break; }
+        IsMoving = true;
+
+        Vector3 entry = pos + entryOffset;
+        Vector3 above = new Vector3(entry.x, Mathf.Max(entry.y, TableY + travelHeight), entry.z);
+
+        // ①~③ 물러나기 → 운반 자세 → 조인트 1 회전 (목표 위 자세를 미리 풀어 조인트 1 각도를 정함)
+        if (!SolveAbove(above, rot, out float[] aboveRad))
         {
-            if (IsReached(pos, rot)) { LastMoveSucceeded = true; break; }
-            if (Time.time - start > ikTimeout) break;
-            yield return new WaitForFixedUpdate();
-            SolveStepOnRobot(pos, rot, Time.fixedDeltaTime);
+            Debug.LogWarning($"[RobotArm] 목표 위 자세를 못 풀었어요 (목표 {pos}, 거리 {FlatDist(pos):F2}m)", this);
+            IsMoving = false; yield break;
         }
-        HoldCurrent();
+        yield return Retreat();
+        yield return CarryAndTurn(aboveRad[0] * Mathf.Rad2Deg);
+
+        // ④ 목표 위로 펴기
+        var cur = CurrentRad();
+        var aboveDeg = ToGoalDeg(cur, aboveRad);
+        var unfold = new List<float[]> { ToDeg(cur), aboveDeg };
+        CheckPath(unfold, "목표 위로 펴기");
+        yield return DrivePath(unfold);
+
+        // ⑤ 직선 진입: 위 → 들어가기 직전 → 목표
+        var path = new List<float[]>();
+        bool ok = PlanLine(Rad(aboveDeg), entry, rot, path) && PlanLine(Rad(path[path.Count - 1]), pos, rot, path, false);
+        if (!ok)
+        {
+            Debug.LogWarning($"[RobotArm] 직선으로 들어가는 길을 못 풀었어요 (목표 {pos})", this);
+            IsMoving = false; yield break;
+        }
+        CheckPath(path, "직선 진입");
+        yield return DrivePath(path);
+        yield return FineTune(pos, rot);
+
+        exitPoints.Clear();
+        exitPoints.Add(entry);
+        exitPoints.Add(above);
+        LastMoveSucceeded = true;
         IsMoving = false;
     }
 
@@ -319,8 +454,232 @@ public class RobotArm : MonoBehaviour, IClickable
     {
         while (!ready) yield return null;
         IsMoving = true;
-        yield return DriveJoints(homeDeg);
+        yield return Retreat();
+        yield return CarryAndTurn(homeDeg[0]);
+        var cur = CurrentRad();
+        var home = ToGoalDeg(cur, Rad(homeDeg));
+        var path = new List<float[]> { ToDeg(cur), home };
+        CheckPath(path, "홈으로");
+        yield return DrivePath(path);
+        exitPoints.Clear();
         IsMoving = false;
+    }
+
+    // ① 들어온 길을 거꾸로 직선으로 (지금 손 방향 유지). 기록이 없으면 손끝이 안전 높이보다 낮을 때만 위로 들어 올림
+    IEnumerator Retreat()
+    {
+        var pts = new List<Vector3>(exitPoints);
+        exitPoints.Clear();
+        if (pts.Count == 0)
+        {
+            float safe = TableY + travelHeight;
+            if (tip.position.y < safe - 0.01f) pts.Add(new Vector3(tip.position.x, safe, tip.position.z));
+        }
+        if (pts.Count == 0) yield break;
+        Quaternion rot = tip.rotation;
+        var path = new List<float[]>();
+        float[] q = CurrentRad();
+        bool first = true;
+        foreach (Vector3 p in pts)
+        {
+            if (!PlanLine(q, p, rot, path, first)) { Debug.LogWarning("[RobotArm] 물러나는 직선 경로를 못 풀어 운반 자세로 바로 감", this); break; }
+            q = Rad(path[path.Count - 1]); first = false;
+        }
+        if (path.Count > 1) { CheckPath(path, "물러나기"); yield return DrivePath(path); }
+    }
+
+    // ② 운반 자세로 접고 ③ 조인트 1만 목표 각도로 돌린다
+    IEnumerator CarryAndTurn(float baseGoalDeg)
+    {
+        int n = joints.Length;
+        var cur = CurrentRad();
+        var c = new float[n];
+        for (int i = 0; i < n; i++) c[i] = carryDeg != null ? carryDeg[i] : homeDeg[i];
+        var folded = ToGoalDeg(cur, Rad(c));
+        folded[0] = cur[0] * Mathf.Rad2Deg;                       // 조인트 1은 그대로
+        var turned = (float[])folded.Clone();
+        turned[0] = folded[0] + Mathf.DeltaAngle(folded[0], baseGoalDeg);
+        if (Mathf.Abs(turned[0]) > jointLimitDeg) turned[0] = baseGoalDeg;
+        var path = new List<float[]> { ToDeg(cur), folded, turned };
+        CheckPath(path, "운반 자세·조인트1 회전");
+        yield return DrivePath(path);
+    }
+
+    // 목표 위 자세: 운반 자세를 목표 방향으로 돌린 모양에서 출발해 푼다 → 항상 같은 계열(팔꿈치 위)의 자연스러운 자세
+    bool SolveAbove(Vector3 pos, Quaternion rot, out float[] qRad)
+    {
+        int n = joints.Length;
+        var seed = new float[n];
+        for (int i = 0; i < n; i++) seed[i] = (carryDeg != null ? carryDeg[i] : homeDeg[i]) * Mathf.Deg2Rad;
+        // 운반 자세 손끝 방향과 목표 방향의 차이만큼 조인트 1을 돌린다 (조인트 1 회전 방향 부호는 FK로 확인)
+        Vector3 b = BasePosition;
+        ForwardKinematics(seed, out Vector3 t0, out _);
+        float yaw0 = Mathf.Atan2(t0.x - b.x, t0.z - b.z) * Mathf.Rad2Deg;
+        var probe = (float[])seed.Clone(); probe[0] += 0.2f;
+        ForwardKinematics(probe, out Vector3 t1, out _);
+        float yawSign = Mathf.Sign(Mathf.DeltaAngle(yaw0, Mathf.Atan2(t1.x - b.x, t1.z - b.z) * Mathf.Rad2Deg));
+        float yawGoal = Mathf.Atan2(pos.x - b.x, pos.z - b.z) * Mathf.Rad2Deg;
+        float j0 = CurrentRad()[0];
+        seed[0] = seed[0] + yawSign * Mathf.DeltaAngle(yaw0, yawGoal) * Mathf.Deg2Rad;
+        seed[0] = j0 + Mathf.DeltaAngle(j0 * Mathf.Rad2Deg, seed[0] * Mathf.Rad2Deg) * Mathf.Deg2Rad;
+
+        qRad = (float[])seed.Clone();
+        if (SolveModel(seed, qRad, pos, rot)) return true;
+        // 예비: 여러 시작점으로
+        if (PlanIK(pos, rot, out float[] g)) { qRad = Rad(g); return true; }
+        return false;
+    }
+
+    // 손끝을 from 자세에서 pos/rot까지 직선으로: lineStep 간격마다 바로 앞 자세에서 이어 풀어 관절이 튀지 않게
+    bool PlanLine(float[] fromRad, Vector3 pos, Quaternion rot, List<float[]> outDeg, bool addStart = true)
+    {
+        int n = fromRad.Length;
+        ForwardKinematics(fromRad, out Vector3 p0, out Quaternion r0);
+        int steps = Mathf.Max(1, Mathf.CeilToInt(Mathf.Max(Vector3.Distance(p0, pos) / Mathf.Max(0.002f, lineStep), Quaternion.Angle(r0, rot) / 5f)));
+        if (addStart) outDeg.Add(ToDeg(fromRad));
+        var q = (float[])fromRad.Clone();
+        for (int k = 1; k <= steps; k++)
+        {
+            float t = k / (float)steps;
+            var seed = (float[])q.Clone();
+            if (!SolveModel(seed, q, Vector3.Lerp(p0, pos, t), Quaternion.Slerp(r0, rot, t))) return false;
+            if (JumpDeg(seed, q) > 25f) return false;      // 한 걸음에 관절이 크게 튀면 자세 계열이 바뀐 것
+            outDeg.Add(ToGoalDeg(seed, q));
+            for (int i = 0; i < n; i++) q[i] = outDeg[outDeg.Count - 1][i] * Mathf.Deg2Rad;
+        }
+        return true;
+    }
+
+    // 도착 후 실제 물리 자세로 미세 보정 (최대 1초)
+    IEnumerator FineTune(Vector3 pos, Quaternion rot)
+    {
+        float start = Time.time;
+        while (!IsReached(pos, rot) && Time.time - start < 1f)
+        {
+            yield return new WaitForFixedUpdate();
+            SolveStepOnRobot(pos, rot, Time.fixedDeltaTime);
+        }
+        HoldCurrent();
+    }
+
+    // 계획한 동작을 3°마다 검사해 부딪히면 경고만 (어디서 부딪히는지 알려 주는 용도)
+    void CheckPath(List<float[]> pathDeg, string what)
+    {
+        if (!warnCollisions || !avoidCollisions || pathDeg.Count < 2) return;
+        int n = joints.Length;
+        var q = new float[n];
+        for (int k = 0; k + 1 < pathDeg.Count; k++)
+        {
+            float d = 0f;
+            for (int i = 0; i < n; i++) d = Mathf.Max(d, Mathf.Abs(pathDeg[k + 1][i] - pathDeg[k][i]));
+            int m = Mathf.Max(1, Mathf.CeilToInt(d / 3f));
+            for (int s = 1; s <= m; s++)
+            {
+                for (int i = 0; i < n; i++) q[i] = Mathf.Lerp(pathDeg[k][i], pathDeg[k + 1][i], s / (float)m) * Mathf.Deg2Rad;
+                if (!CollisionFree(q))
+                {
+                    ForwardKinematics(q, out Vector3 tp, out _);
+                    Debug.LogWarning($"[RobotArm] 경로 충돌 경고: {what} 중 ({lastHit}) 손끝 {tp}", this);
+                    return;
+                }
+            }
+        }
+    }
+
+    // 경로 전체를 한 번에 부드럽게 (처음·끝만 감속) 따라간다
+    IEnumerator DrivePath(List<float[]> pathDeg)
+    {
+        int n = joints.Length, m = pathDeg.Count;
+        if (m == 0) yield break;
+        var cum = new float[m];
+        for (int k = 1; k < m; k++)
+        {
+            float d = 0f;
+            for (int i = 0; i < n; i++) d = Mathf.Max(d, Mathf.Abs(pathDeg[k][i] - pathDeg[k - 1][i]));
+            cum[k] = cum[k - 1] + d;
+        }
+        float total = cum[m - 1];
+        float duration = Mathf.Max(0.1f, 1.5f * total / moveSpeed);
+        float t = 0f;
+        while (t < duration && total > 0.01f)
+        {
+            yield return new WaitForFixedUpdate();
+            t += Time.fixedDeltaTime;
+            float L = Mathf.SmoothStep(0f, 1f, t / duration) * total;
+            int k = 1; while (k < m - 1 && cum[k] < L) k++;
+            float seg = cum[k] - cum[k - 1];
+            float u = seg > 1e-5f ? Mathf.Clamp01((L - cum[k - 1]) / seg) : 1f;
+            for (int i = 0; i < n; i++) SetDrive(i, Mathf.Lerp(pathDeg[k - 1][i], pathDeg[k][i], u));
+        }
+        yield return DriveJoints(pathDeg[m - 1]);   // 끝 자세 맞추고 드라이브가 따라올 때까지 대기
+    }
+
+    float[] CurrentRad() { var q = new float[joints.Length]; for (int i = 0; i < q.Length; i++) q[i] = joints[i].jointPosition[0]; return q; }
+    static float[] ToDeg(float[] rad) { var d = new float[rad.Length]; for (int i = 0; i < d.Length; i++) d[i] = rad[i] * Mathf.Rad2Deg; return d; }
+    static float[] Rad(float[] deg) { var r = new float[deg.Length]; for (int i = 0; i < r.Length; i++) r[i] = deg[i] * Mathf.Deg2Rad; return r; }
+    static float JumpDeg(float[] a, float[] b)
+    {
+        float d = 0f;
+        for (int i = 0; i < a.Length; i++) d = Mathf.Max(d, Mathf.Abs(Mathf.DeltaAngle(a[i] * Mathf.Rad2Deg, b[i] * Mathf.Rad2Deg)));
+        return d;
+    }
+    float FlatDist(Vector3 p) { Vector3 b = BasePosition; return Vector2.Distance(new Vector2(p.x, p.z), new Vector2(b.x, b.z)); }
+
+    // 운반 자세: 밑동 가까이(carryRadius), 높이(carryHeight)에 손을 수평으로 둔 팔꿈치 위 자세
+    void BuildCarryPose()
+    {
+        Vector3 b = BasePosition;
+        ForwardKinematics(Rad(homeDeg), out Vector3 ht, out _);
+        Vector3 fwd = ht - b; fwd.y = 0f;
+        if (fwd.sqrMagnitude < 1e-4f) fwd = transform.forward;
+        fwd.Normalize();
+        Vector3 p = new Vector3(b.x, TableY + carryHeight, b.z) + fwd * carryRadius;
+        // 홈 자세에서 출발해 푼다
+        float[] seed = Rad(homeDeg);
+        foreach (float pitch in new[] { 0f, 30f, 60f, -30f })
+        {
+            Quaternion rot = Quaternion.LookRotation(Quaternion.AngleAxis(pitch, Vector3.Cross(Vector3.up, fwd)) * fwd, Vector3.up);
+            var q = (float[])seed.Clone();
+            if (SolveModel(seed, q, p, rot) && AboveTable(q, tableClearance) && SameConfig(q) && (!avoidCollisions || CollisionFree(q)))
+            {
+                carryDeg = ToGoalDeg(seed, q);
+                return;
+            }
+        }
+        if (PlanIK(p, Quaternion.LookRotation(fwd, Vector3.up), out float[] g)) { carryDeg = g; return; }
+        Debug.LogWarning("[RobotArm] 운반 자세를 못 구해 홈(일자) 자세를 운반 자세로 씀 (carryHeight·carryRadius 조정)", this);
+        carryDeg = (float[])homeDeg.Clone();
+    }
+
+    // 큰 방향 전환은 실제 로봇처럼 두 단계로: ① 밑동(조인트 1)만 돌려 목표 쪽을 보고 ② 나머지 관절로 팔을 뻗는다
+    // → 팔 모양을 유지한 채 회전하므로 마디끼리 꼬이거나 엉뚱한 곳을 쓸고 지나가지 않는다
+    IEnumerator DriveBaseFirst(float[] goalDeg)
+    {
+        int n = joints.Length;
+        if (baseFirst && n > 1)
+        {
+            float cur0 = ActualDeg(0);
+            if (Mathf.Abs(goalDeg[0] - cur0) > baseFirstMinDeg)
+            {
+                var step = new float[n];
+                for (int i = 0; i < n; i++) step[i] = ActualDeg(i);
+                step[0] = goalDeg[0];
+                yield return DriveJoints(step);
+            }
+        }
+        yield return DriveJoints(goalDeg);
+    }
+
+    float[] NearestHome()
+    {
+        var g = new float[homeDeg.Length];
+        for (int i = 0; i < g.Length; i++)
+        {
+            float cur = ActualDeg(i);
+            float near = cur + Mathf.DeltaAngle(cur, homeDeg[i]);
+            g[i] = Mathf.Abs(near) <= jointLimitDeg ? near : homeDeg[i];
+        }
+        return g;
     }
 
     // 그리퍼 닫기(amount 0~1, 1이 완전히 닫힘) / 열기(0)
@@ -350,6 +709,7 @@ public class RobotArm : MonoBehaviour, IClickable
 
         heldObject = obj;
         heldOffsetPos = tip.InverseTransformPoint(obj.position);
+        CaptureHeldBox(obj);
         heldOffsetRot = Quaternion.Inverse(tip.rotation) * obj.rotation;
         heldBody = obj.GetComponent<Rigidbody>();
         if (heldBody != null)
@@ -393,6 +753,7 @@ public class RobotArm : MonoBehaviour, IClickable
         if (!ready) return;                 // 시작 직후 축 확인 중에는 건너뜀
         StopAllCoroutines();
         IsMoving = false;
+        exitPoints.Clear();
         Release();
         SnapToHome();
         if (gripper != null)
@@ -436,6 +797,7 @@ public class RobotArm : MonoBehaviour, IClickable
             }
             p = p + r * localPos;
             r = r * localRot;
+            if (fkLinkPos != null) { fkLinkPos[k] = p; fkLinkRot[k] = r; }
         }
         tipPos = p + r * tipRelPos;
         tipRot = r * tipRelRot;
@@ -450,20 +812,333 @@ public class RobotArm : MonoBehaviour, IClickable
 
         goalDeg = null;
         float[] q = (float[])seed.Clone();
-        if (SolveModel(seed, q, pos, rot)) { goalDeg = ToGoalDeg(seed, q); return true; }
-
-        var rng = new System.Random(7);
-        float bestDelta = float.MaxValue;
-        for (int attempt = 0; attempt < 10; attempt++)
+        if (SolveModel(seed, q, pos, rot))
         {
-            for (int i = 0; i < n; i++) q[i] = seed[i] + (float)(rng.NextDouble() * 2 - 1) * Mathf.PI * 0.5f;
+            float[] g0 = ToGoalDeg(seed, q);
+            if (Score(seed, q, g0) == 2) { goalDeg = g0; return true; }
+        }
+
+        // 시작점을 바꿔 여러 해를 구하고 점수로 고른다
+        //   2점: 도착 자세가 식탁 위 + 팔 마디끼리 안 겹침 + 가는 길에도 안 겹침
+        //   1점: 도착 자세만 괜찮음 (가는 길에 잠깐 겹침)
+        //   0점: 둘 다 안 됨 (시연이 멈추지 않게 마지막 수단)
+        // 같은 점수면 관절이 덜 움직이는 해
+        var rng = new System.Random(7);
+        int bestScore = -1; float bestDelta = float.MaxValue;
+        for (int attempt = 0; attempt < 64; attempt++)
+        {
+            // 짝수 번째는 홈(대기) 자세 근처에서 시작 → 홈과 같은 자세 계열(팔꿈치 위) 해가 잘 나온다
+            bool fromHome = homeDeg != null && homeDeg.Length == n && attempt % 2 == 0;
+            for (int i = 0; i < n; i++)
+            {
+                float baseQ = fromHome ? homeDeg[i] * Mathf.Deg2Rad : seed[i];
+                float spread = fromHome ? 0.35f : 0.6f;
+                q[i] = baseQ + (float)(rng.NextDouble() * 2 - 1) * Mathf.PI * spread;
+            }
             if (!SolveModel(seed, q, pos, rot)) continue;
             float[] g = ToGoalDeg(seed, q);
             float delta = 0f;
             for (int i = 0; i < n; i++) delta = Mathf.Max(delta, Mathf.Abs(g[i] - seed[i] * Mathf.Rad2Deg));
-            if (delta < bestDelta) { bestDelta = delta; goalDeg = g; }
+            int sc = Score(seed, q, g);
+            if (sc > bestScore || (sc == bestScore && delta < bestDelta)) { bestScore = sc; bestDelta = delta; goalDeg = g; }
+            if (bestScore == 2 && attempt >= 12) break;
         }
+        if (goalDeg != null && bestScore < 2)
+            Debug.LogWarning($"[RobotArm] 식탁·팔 마디와 안 부딪히는 자세를 못 찾아 가장 나은 자세를 씀 (점수 {bestScore}, 목표 {pos}, 로봇에서 수평 {Vector3.Distance(new Vector3(pos.x, 0, pos.z), new Vector3(BasePosition.x, 0, BasePosition.z)):F2}m)", this);
         return goalDeg != null;
+    }
+
+    int Score(float[] seedRad, float[] qRad, float[] goalDeg)
+    {
+        if (!PoseOk(qRad, tableClearance)) return 0;
+        // 실제로 움직이는 방식(DriveBaseFirst)과 똑같이 중간 자세를 검사: ① 밑동만 회전 ② 나머지 관절
+        int n = qRad.Length;
+        var mid = new float[n];
+        var goal = new float[n];
+        for (int i = 0; i < n; i++) goal[i] = goalDeg[i] * Mathf.Deg2Rad;
+        bool basePhase = baseFirst && n > 1 && Mathf.Abs(goalDeg[0] - seedRad[0] * Mathf.Rad2Deg) > baseFirstMinDeg;
+        if (basePhase)
+        {
+            for (int k = 1; k <= 6; k++)
+            {
+                for (int i = 0; i < n; i++) mid[i] = seedRad[i];
+                mid[0] = Mathf.Lerp(seedRad[0], goal[0], k / 6f);
+                if (!PoseOk(mid, 0f)) return 1;
+            }
+        }
+        for (int k = 1; k <= 8; k++)
+        {
+            float t = k / 9f;
+            for (int i = 0; i < n; i++) mid[i] = Mathf.Lerp(i == 0 && basePhase ? goal[0] : seedRad[i], goal[i], t);
+            if (!PoseOk(mid, 0f)) return 1;
+        }
+        return 2;
+    }
+
+    bool PoseOk(float[] q, float tableClear) =>
+        AboveTable(q, tableClear) && SelfClear(q) && SameConfig(q) && (!avoidCollisions || CollisionFree(q));
+
+    // ── 자세 계열 고정 (UR 컨트롤러의 어깨·팔꿈치·손목 설정과 같은 개념) ──
+    // 같은 손 위치라도 팔꿈치 위/아래, 손목 위/아래, 앞으로/뒤로 뻗기 조합이 여러 개다.
+    // 동작마다 다른 계열을 고르면 그 사이를 이동하면서 손목·팔꿈치가 반대편으로 넘어가며 마디끼리 뚫고 지나간다.
+    // → 항상 "팔꿈치 위 + 앞으로 뻗기 + 홈과 같은 쪽 손목" 계열만 쓴다.
+    int refWristSign;          // 홈 자세의 손목(4번 관절) 꺾임 방향. 0이면 검사 안 함
+    bool SameConfig(float[] q)
+    {
+        int n = joints.Length;
+        if (!lockConfiguration || n < 4) return true;
+        ForwardKinematics(q, out Vector3 tipPos, out _);
+        Vector3 s = fkPivot[1], e = fkPivot[2], w = fkPivot[3];
+
+        // 팔꿈치 위: 팔꿈치가 어깨-손목을 잇는 선보다 위에 있어야 한다
+        Vector3 sw = w - s;
+        float t = sw.sqrMagnitude > 1e-6f ? Mathf.Clamp01(Vector3.Dot(e - s, sw) / sw.sqrMagnitude) : 0f;
+        if (e.y < (s + sw * t).y - 0.005f) return false;
+
+        // 앞으로 뻗기: 팔꿈치가 손끝과 같은 쪽에 있어야 한다 (밑동 너머 뒤로 넘어가는 자세 금지)
+        Vector3 b = fkPivot[0];
+        Vector2 toE = new Vector2(e.x - b.x, e.z - b.z), toT = new Vector2(tipPos.x - b.x, tipPos.z - b.z);
+        if (toT.sqrMagnitude > 0.0025f && Vector2.Dot(toE, toT) < -0.01f) return false;
+
+        // 손목 방향: 홈 자세와 같은 쪽으로 꺾인 해만
+        if (refWristSign != 0 && n >= 5)
+        {
+            float d = Mathf.DeltaAngle(restRad[4] * Mathf.Rad2Deg, q[4] * Mathf.Rad2Deg);
+            if (Mathf.Abs(d) > 10f && (int)Mathf.Sign(d) != refWristSign) return false;
+        }
+        return true;
+    }
+
+    // 팔 마디끼리 겹치는지 (UR3는 마디가 옆으로 비켜 있어 관절 중심선만으로는 판단이 어려움 → 실제로 부딪히는 경우만 본다)
+    //   1) 팔꿈치를 elbowFoldLimit보다 많이 접으면 아래팔이 위팔에 박힘
+    //   2) 손(손목 끝~손끝)이 로봇 밑동 기둥에 가까우면 밑동을 뚫음
+    readonly Vector3[] segA = new Vector3[8], segB = new Vector3[8];
+    bool SelfClear(float[] q)
+    {
+        if (joints.Length >= 3)
+        {
+            float fold = Mathf.Abs(Mathf.DeltaAngle(0f, (q[2] - restRad[2]) * Mathf.Rad2Deg));
+            if (fold > elbowFoldLimit) return false;
+        }
+        return true;
+    }
+
+    // ═══════════ 실제 모양 기준 충돌 검사 (상자 = OBB) ═══════════
+    // 로봇: 링크마다 그 링크에 붙은 메쉬 전체를 감싸는 상자 (그리퍼 손가락은 손 링크에 포함)
+    // 장애물: 식탁 면(로봇 밑면 높이) + obstacleRoots 아래 렌더러 상자 (커피 머신·컵·받침대·트레이)
+    // 지금 다루는 컵은 SetIgnore로 빼고, 들고 있는 컵은 손에 붙은 상자로 함께 검사
+    struct Box { public Vector3 c; public Quaternion r; public Vector3 h; public string name; }
+    string lastHit = "";
+    Vector3[] fkLinkPos; Quaternion[] fkLinkRot;
+    Box[] linkLocalBox;          // 링크 좌표계 기준 상자 (h가 0이면 메쉬 없음)
+    Box rootLocalBox; bool hasRootBox;
+    Box heldLocalBox; bool hasHeldBox;   // 마지막 링크 좌표계 기준
+    readonly List<Box> obstacles = new List<Box>();
+    readonly HashSet<Transform> ignoreRoots = new HashSet<Transform>();
+    float lastObstacleBuild = -1f;
+
+    public void SetIgnore(params Transform[] roots)
+    {
+        ignoreRoots.Clear();
+        if (roots != null) foreach (Transform t in roots) if (t != null) ignoreRoots.Add(t);
+        lastObstacleBuild = -1f;
+    }
+
+    void BuildCollisionModel()
+    {
+        int m = links.Length;
+        fkLinkPos = new Vector3[m]; fkLinkRot = new Quaternion[m];
+        linkLocalBox = new Box[m];
+        var mins = new Vector3[m + 1]; var maxs = new Vector3[m + 1]; var has = new bool[m + 1];
+        foreach (Renderer rd in GetComponentsInChildren<Renderer>())
+        {
+            if (!rd.enabled || !rd.gameObject.activeInHierarchy) continue;
+            int k = OwnerIndex(rd.transform);           // -1 = 루트(밑동), -2 = 해당 없음
+            if (k == -2) continue;
+            Transform link = k < 0 ? rootLink : links[k].transform;
+            Bounds lb = rd.localBounds;
+            int slot = k + 1;
+            foreach (Vector3 corner in Corners(lb))
+            {
+                Vector3 w = rd.transform.TransformPoint(corner);
+                Vector3 l = Quaternion.Inverse(link.rotation) * (w - link.position);
+                if (!has[slot]) { mins[slot] = maxs[slot] = l; has[slot] = true; }
+                else { mins[slot] = Vector3.Min(mins[slot], l); maxs[slot] = Vector3.Max(maxs[slot], l); }
+            }
+        }
+        for (int k = 0; k < m; k++)
+            linkLocalBox[k] = has[k + 1] ? new Box { c = (mins[k + 1] + maxs[k + 1]) * 0.5f, r = Quaternion.identity, h = (maxs[k + 1] - mins[k + 1]) * 0.5f } : new Box();
+        hasRootBox = has[0];
+        if (hasRootBox) rootLocalBox = new Box { c = (mins[0] + maxs[0]) * 0.5f, r = Quaternion.identity, h = (maxs[0] - mins[0]) * 0.5f };
+    }
+
+    // 렌더러가 속한 체인 링크 번호 (체인 밖 손가락 등은 가장 가까운 체인 조상으로)
+    int OwnerIndex(Transform t)
+    {
+        for (Transform p = t; p != null; p = p.parent)
+        {
+            if (p == rootLink) return -1;
+            ArticulationBody ab = p.GetComponent<ArticulationBody>();
+            if (ab == null) continue;
+            int idx = System.Array.IndexOf(links, ab);
+            if (idx >= 0) return idx;
+            if (ab.isRoot) return -1;
+        }
+        return -2;
+    }
+
+    static IEnumerable<Vector3> Corners(Bounds b)
+    {
+        Vector3 c = b.center, e = b.extents;
+        for (int i = 0; i < 8; i++)
+            yield return c + new Vector3((i & 1) == 0 ? -e.x : e.x, (i & 2) == 0 ? -e.y : e.y, (i & 4) == 0 ? -e.z : e.z);
+    }
+
+    void CaptureHeldBox(Transform obj)
+    {
+        hasHeldBox = false;
+        if (obj == null || links.Length == 0) return;
+        Transform last = links[links.Length - 1].transform;
+        Vector3 mn = Vector3.zero, mx = Vector3.zero; bool any = false;
+        foreach (Renderer rd in obj.GetComponentsInChildren<Renderer>())
+            foreach (Vector3 corner in Corners(rd.localBounds))
+            {
+                Vector3 l = Quaternion.Inverse(last.rotation) * (rd.transform.TransformPoint(corner) - last.position);
+                if (!any) { mn = mx = l; any = true; } else { mn = Vector3.Min(mn, l); mx = Vector3.Max(mx, l); }
+            }
+        if (any) { heldLocalBox = new Box { c = (mn + mx) * 0.5f, r = Quaternion.identity, h = (mx - mn) * 0.5f }; hasHeldBox = true; }
+    }
+
+    void BuildObstacles()
+    {
+        if (Time.time - lastObstacleBuild < 0.05f && lastObstacleBuild >= 0f) return;   // 한 번의 계획 안에서는 재사용
+        lastObstacleBuild = Time.time;
+        obstacles.Clear();
+        var roots = new List<Transform>();
+        if (obstacleRoots != null) foreach (Transform t in obstacleRoots) if (t != null) roots.Add(t);
+        if (roots.Count == 0) { GameObject st = GameObject.Find("CoffeeStation"); if (st != null) roots.Add(st.transform); }
+        foreach (Transform root in roots)
+            foreach (Renderer rd in root.GetComponentsInChildren<Renderer>())
+            {
+                if (!rd.enabled || !rd.gameObject.activeInHierarchy) continue;
+                if (rd.transform.IsChildOf(transform)) continue;                       // 로봇 자신
+                if (heldObject != null && rd.transform.IsChildOf(heldObject)) continue;  // 들고 있는 컵
+                bool skip = false;
+                foreach (Transform ig in ignoreRoots) if (rd.transform.IsChildOf(ig)) { skip = true; break; }
+                if (skip || rd is ParticleSystemRenderer) continue;
+                Bounds lb = rd.localBounds;
+                Vector3 h = Vector3.Scale(lb.extents, rd.transform.lossyScale);
+                h = new Vector3(Mathf.Abs(h.x), Mathf.Abs(h.y), Mathf.Abs(h.z)) - Vector3.one * collisionMargin;
+                if (h.x <= 0.002f || h.y <= 0.002f || h.z <= 0.002f) h = Vector3.Max(h, Vector3.one * 0.002f);
+                obstacles.Add(new Box { c = rd.transform.TransformPoint(lb.center), r = rd.transform.rotation, h = h, name = rd.name });
+            }
+    }
+
+    Box WorldLinkBox(int k, float shrink)
+    {
+        Box lb = linkLocalBox[k];
+        return new Box { c = fkLinkPos[k] + fkLinkRot[k] * lb.c, r = fkLinkRot[k], h = Vector3.Max(lb.h - Vector3.one * shrink, Vector3.one * 0.003f) };
+    }
+
+    bool CollisionFree(float[] q)
+    {
+        if (linkLocalBox == null) return true;
+        BuildObstacles();
+        ForwardKinematics(q, out _, out _);
+        int m = links.Length;
+        float table = transform.position.y;
+        var boxes = new Box[m];
+        for (int k = 0; k < m; k++) boxes[k] = WorldLinkBox(k, 0f);
+
+        // ① 식탁: 밑동 다음 링크부터 손목까지 상자 가장 아래가 식탁 면 아래로 내려가면 안 됨
+        //    (마지막 링크 = 손목 끝 + 그리퍼는 컵을 잡으려면 식탁 가까이 내려가야 해서 제외, 장애물 검사는 함)
+        for (int k = 1; k < m - 1; k++)
+            if (linkLocalBox[k].h != Vector3.zero && MinY(boxes[k]) < table - 0.003f) { lastHit = $"{links[k].name} ↔ 식탁"; return false; }
+
+        // ② 장애물(커피 머신·컵·받침대·트레이)
+        foreach (Box ob in obstacles)
+        {
+            for (int k = 1; k < m; k++)
+                if (linkLocalBox[k].h != Vector3.zero && Overlap(boxes[k], ob)) { lastHit = $"{links[k].name} ↔ {ob.name}"; return false; }
+            if (heldObject != null && hasHeldBox)
+            {
+                Box hb = new Box { c = fkLinkPos[m - 1] + fkLinkRot[m - 1] * heldLocalBox.c, r = fkLinkRot[m - 1], h = heldLocalBox.h - Vector3.one * collisionMargin };
+                if (Overlap(hb, ob)) { lastHit = $"든 컵 ↔ {ob.name}"; return false; }
+            }
+        }
+
+        // ③ 로봇 자신: 서로 붙어 있지 않은 링크(번호 차이 2 이상)끼리, 밑동 ↔ 손목·손
+        for (int a = 0; a < m; a++)
+        {
+            if (linkLocalBox[a].h == Vector3.zero) continue;
+            Box ba = WorldLinkBox(a, selfShrink);
+            for (int bIdx = a + 3; bIdx < m; bIdx++)
+            {
+                if (linkLocalBox[bIdx].h == Vector3.zero) continue;
+                if (Overlap(ba, WorldLinkBox(bIdx, selfShrink))) { lastHit = $"{links[a].name} ↔ {links[bIdx].name}"; return false; }
+            }
+        }
+        if (hasRootBox)
+        {
+            Box rb = new Box { c = rootLink.position + rootLink.rotation * rootLocalBox.c, r = rootLink.rotation, h = rootLocalBox.h - Vector3.one * selfShrink };
+            for (int k = 3; k < m; k++)
+                if (linkLocalBox[k].h != Vector3.zero && Overlap(rb, WorldLinkBox(k, selfShrink))) { lastHit = $"밑동 ↔ {links[k].name}"; return false; }
+        }
+        return true;
+    }
+
+    static float MinY(Box b)
+    {
+        Vector3 ax = b.r * Vector3.right, ay = b.r * Vector3.up, az = b.r * Vector3.forward;
+        return b.c.y - (Mathf.Abs(ax.y) * b.h.x + Mathf.Abs(ay.y) * b.h.y + Mathf.Abs(az.y) * b.h.z);
+    }
+
+    // 회전된 두 상자가 겹치는지 (분리축 15개 검사)
+    static bool Overlap(Box a, Box b)
+    {
+        Vector3[] A = { a.r * Vector3.right, a.r * Vector3.up, a.r * Vector3.forward };
+        Vector3[] B = { b.r * Vector3.right, b.r * Vector3.up, b.r * Vector3.forward };
+        float[] ea = { a.h.x, a.h.y, a.h.z }, eb = { b.h.x, b.h.y, b.h.z };
+        Vector3 d = b.c - a.c;
+        var R = new float[3, 3]; var AR = new float[3, 3];
+        for (int i = 0; i < 3; i++) for (int j = 0; j < 3; j++) { R[i, j] = Vector3.Dot(A[i], B[j]); AR[i, j] = Mathf.Abs(R[i, j]) + 1e-5f; }
+        float[] t = { Vector3.Dot(d, A[0]), Vector3.Dot(d, A[1]), Vector3.Dot(d, A[2]) };
+        for (int i = 0; i < 3; i++)
+            if (Mathf.Abs(t[i]) > ea[i] + eb[0] * AR[i, 0] + eb[1] * AR[i, 1] + eb[2] * AR[i, 2]) return false;
+        for (int j = 0; j < 3; j++)
+            if (Mathf.Abs(t[0] * R[0, j] + t[1] * R[1, j] + t[2] * R[2, j]) > ea[0] * AR[0, j] + ea[1] * AR[1, j] + ea[2] * AR[2, j] + eb[j]) return false;
+        for (int i = 0; i < 3; i++)
+            for (int j = 0; j < 3; j++)
+            {
+                int i1 = (i + 1) % 3, i2 = (i + 2) % 3, j1 = (j + 1) % 3, j2 = (j + 2) % 3;
+                float ra = ea[i1] * AR[i2, j] + ea[i2] * AR[i1, j];
+                float rb = eb[j1] * AR[i, j2] + eb[j2] * AR[i, j1];
+                if (Mathf.Abs(t[i2] * R[i1, j] - t[i1] * R[i2, j]) > ra + rb) return false;
+            }
+        return true;
+    }
+
+    static float SegDist(Vector3 p1, Vector3 q1, Vector3 p2, Vector3 q2)
+    {
+        Vector3 d1 = q1 - p1, d2 = q2 - p2, r = p1 - p2;
+        float a = Vector3.Dot(d1, d1), e = Vector3.Dot(d2, d2), f = Vector3.Dot(d2, r);
+        float s, t;
+        if (a <= 1e-8f && e <= 1e-8f) return r.magnitude;
+        if (a <= 1e-8f) { s = 0f; t = Mathf.Clamp01(f / e); }
+        else
+        {
+            float c = Vector3.Dot(d1, r);
+            if (e <= 1e-8f) { t = 0f; s = Mathf.Clamp01(-c / a); }
+            else
+            {
+                float bb = Vector3.Dot(d1, d2), den = a * e - bb * bb;
+                s = den != 0f ? Mathf.Clamp01((bb * f - c * e) / den) : 0f;
+                t = (bb * s + f) / e;
+                if (t < 0f) { t = 0f; s = Mathf.Clamp01(-c / a); }
+                else if (t > 1f) { t = 1f; s = Mathf.Clamp01((bb - c) / a); }
+            }
+        }
+        return ((p1 + d1 * s) - (p2 + d2 * t)).magnitude;
     }
 
     // DLS 반복. 남는 자유도는 seed(지금 자세) 쪽으로 당겨 팔이 크게 뒤집히지 않게 한다.
@@ -502,6 +1177,24 @@ public class RobotArm : MonoBehaviour, IClickable
             }
         }
         return false;
+    }
+
+    // 팔꿈치가 식탁 아래로 내려가는 "팔꿈치 아래" 자세를 거른다.
+    // - 어깨·팔꿈치(1, 2번 관절): 식탁 면 + tableClearance 이상
+    // - 첫 손목(3번): 식탁 면 이상
+    // - 나머지 손목(4, 5번)은 컵을 옆에서 잡을 때 손끝 높이(식탁 위 5cm)까지 내려와야 하므로 검사하지 않는다
+    bool AboveTable(float[] q) => AboveTable(q, tableClearance);
+    bool AboveTable(float[] q, float clearance)
+    {
+        ForwardKinematics(q, out _, out _);
+        float table = transform.position.y;
+        int last = Mathf.Min(3, joints.Length - 1);
+        for (int i = 1; i <= last; i++)
+        {
+            float floor = table + (i < 3 ? clearance : 0f);
+            if (fkPivot[i].y < floor) return false;
+        }
+        return true;
     }
 
     // 같은 자세를 뜻하는 각도 중 지금 각도에서 가까운 쪽으로 (한 바퀴 돌지 않게)

@@ -1,38 +1,37 @@
-using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 옵션 패널 (FR-03, FR-29, FR-31 / WBS 4.07 간단 버전)
-/// - 위쪽 탭: 파트 (벽지, 바닥재 …)
-/// - 아래 목록: 옵션 이름 + "기본" 또는 "+400,000원", 고른 것은 파란색
-/// - 옵션을 누르면 바로 공간에 적용하고 좌측 상단 추가 비용 합계 갱신
-/// - 벽·바닥을 클릭하면 HUDController가 ShowPart로 그 파트 탭을 띄움
+/// 옵션 패널 (FR-03, FR-29, FR-31 / WBS 4.07)
+/// - 위쪽 탭: 파트 (벽지, 바닥재, 주방 상판, 소파 패브릭, 러그, 그림 액자, 화분)
+/// - 아래 목록: 색 견본 + 옵션 이름 + "기본" 또는 "+400,000원", 지금 고른 것은 파란색
+/// - 옵션을 누르면 ConfigurationState.Select → 공간 반영·기록·합계 갱신은 거기서 한다
 ///
-/// 지금은 이 패널이 "파트별 선택 상태"도 같이 들고 있음.
-/// 김찬중 ConfigurationState(3.09)가 합류하면 Select → config.Select로 바꾸면 됨.
+/// 10/12 변경: 옵션 목록과 선택 상태를 이 패널이 따로 들고 있지 않고
+///   OptionCatalog(부록 A-7) + ConfigurationState(김찬중 3.09) 하나만 보고 그린다.
+///   → 패널, 합계, 이벤트 기록이 항상 같은 값을 본다 (TC-49).
 /// </summary>
 public class OptionPanelUI : PanelUI
 {
-    [Serializable]
-    public class PartEntry
-    {
-        public string label;               // 탭 이름 "벽지"
-        public PartType part;
-        public OptionPart target;          // 적용할 Option_Wall 등
-        public List<OptionItem> options = new List<OptionItem>();
-    }
-
-    [SerializeField] private List<PartEntry> entries = new List<PartEntry>();
+    [SerializeField] private ConfigurationState config;
     [SerializeField] private RectTransform tabBar;
     [SerializeField] private RectTransform listRoot;
-    [SerializeField] private HUDController hud;
 
-    private readonly Dictionary<PartType, OptionItem> selected = new Dictionary<PartType, OptionItem>();
+    private readonly List<PartType> tabs = new List<PartType>();
     private readonly List<Button> tabButtons = new List<Button>();
+    private readonly List<(OptionItem item, Image bg)> rows = new List<(OptionItem, Image)>();
     private int currentTab;
     private bool built;
+
+    protected override void Awake()
+    {
+        base.Awake();
+        if (config == null) config = FindAnyObjectByType<ConfigurationState>();
+    }
+
+    private void OnEnable() => HomeEvents.OnOptionChanged += HandleOptionChanged;
+    private void OnDisable() => HomeEvents.OnOptionChanged -= HandleOptionChanged;
 
     public override void Open()
     {
@@ -41,32 +40,46 @@ public class OptionPanelUI : PanelUI
         ShowTab(currentTab);
     }
 
-    /// <summary>벽·바닥 클릭 때 그 파트 탭으로 이동</summary>
+    /// <summary>벽·바닥 등을 클릭했을 때 그 파트 탭으로 이동 (FR-03)</summary>
     public void ShowPart(PartType part)
     {
         EnsureBuilt();
-        int i = entries.FindIndex(e => e.part == part);
+        int i = tabs.IndexOf(part);
         if (i >= 0) ShowTab(i);
     }
+
+    // 0.5초마다(PanelUI) 선택 표시만 다시 칠한다. 버튼을 새로 만들지 않아서 클릭이 끊기지 않음.
+    protected override void Refresh() => PaintRows();
 
     // ------------------------------------------------------------
     private void EnsureBuilt()
     {
         if (built) return;
+        if (config == null) config = FindAnyObjectByType<ConfigurationState>();
+        if (config == null || config.Catalog == null)
+        {
+            Debug.LogWarning("[OptionPanelUI] ConfigurationState 또는 OptionCatalog가 없음 (COM → 9번 메뉴 실행)", this);
+            return;   // built를 켜지 않음 → 다음에 열 때 다시 시도
+        }
         built = true;
 
-        // 처음엔 파트마다 기본 옵션이 선택된 상태 (FR-31: 전부 기본이면 0원)
-        foreach (PartEntry e in entries)
+        // 씬에 OptionPart가 있고, 카탈로그에 옵션이 있는 파트만 탭으로 (enum 순서 = SRS A-7 순서)
+        var partsInScene = new HashSet<PartType>();
+        foreach (OptionPart p in FindObjectsByType<OptionPart>()) partsInScene.Add(p.part);
+
+        foreach (PartType part in System.Enum.GetValues(typeof(PartType)))
         {
-            OptionItem def = e.options.Find(o => o.isDefault);
-            if (def != null) selected[e.part] = def;
+            if (!partsInScene.Contains(part)) continue;
+            if (config.Catalog.GetOptions(part).Count == 0) continue;
+            tabs.Add(part);
         }
 
-        // 탭 버튼
-        for (int i = 0; i < entries.Count; i++)
+        // 탭 버튼 (7개면 한 줄이 좁아서 글자를 조금 줄임)
+        int fontSize = tabs.Count > 5 ? 15 : 20;
+        for (int i = 0; i < tabs.Count; i++)
         {
             int index = i;
-            Button b = UIFactory.CreateButton(tabBar, $"Tab_{entries[i].part}", entries[i].label, 20);
+            Button b = UIFactory.CreateButton(tabBar, $"Tab_{tabs[i]}", tabs[i].ToKorean(), fontSize);
             b.onClick.AddListener(() => ShowTab(index));
             tabButtons.Add(b);
         }
@@ -74,8 +87,8 @@ public class OptionPanelUI : PanelUI
 
     private void ShowTab(int index)
     {
-        if (entries.Count == 0) return;
-        currentTab = Mathf.Clamp(index, 0, entries.Count - 1);
+        if (tabs.Count == 0) return;
+        currentTab = Mathf.Clamp(index, 0, tabs.Count - 1);
 
         for (int i = 0; i < tabButtons.Count; i++)
             ((Image)tabButtons[i].targetGraphic).color = i == currentTab ? UIFactory.SelectedColor : UIFactory.ButtonColor;
@@ -87,53 +100,45 @@ public class OptionPanelUI : PanelUI
     {
         for (int i = listRoot.childCount - 1; i >= 0; i--)
             Destroy(listRoot.GetChild(i).gameObject);
+        rows.Clear();
+        if (tabs.Count == 0) return;
 
-        PartEntry entry = entries[currentTab];
-        selected.TryGetValue(entry.part, out OptionItem current);
-
-        foreach (OptionItem item in entry.options)
+        foreach (OptionItem item in config.Catalog.GetOptions(tabs[currentTab]))
         {
             OptionItem captured = item;
-            string price = item.isDefault ? "기본" : $"+{item.extraCost:N0}원";
-            Button row = UIFactory.CreateButton(listRoot, $"Row_{item.optionId}",
-                $"{item.displayName}", 20, TextAnchor.MiddleLeft);
+            Button row = UIFactory.CreateButton(listRoot, $"Row_{item.optionId}", item.displayName, 20, TextAnchor.MiddleLeft);
             UIFactory.SetLayoutSize(row, height: 52);
-            ((Image)row.targetGraphic).color = item == current ? UIFactory.SelectedColor : UIFactory.ButtonColor;
 
-            // 오른쪽 끝: 가격
-            Text priceText = UIFactory.CreateText(row.transform, "Price", price, 18, TextAnchor.MiddleRight);
+            // 오른쪽 끝: "기본" / "+400,000원" (FR-31 1번)
+            Text priceText = UIFactory.CreateText(row.transform, "Price", item.CostLabel(), 18, TextAnchor.MiddleRight);
             UIFactory.Stretch(priceText.rectTransform, 10f);
 
-            // 왼쪽 색 견본 (색상형 옵션만)
-            if (item.useColor)
-            {
-                Image swatch = UIFactory.CreatePanel(row.transform, "Swatch", item.color);
-                swatch.raycastTarget = false;
-                RectTransform rt = swatch.rectTransform;
-                rt.anchorMin = new Vector2(0f, 0.5f);
-                rt.anchorMax = new Vector2(0f, 0.5f);
-                rt.pivot = new Vector2(0f, 0.5f);
-                rt.anchoredPosition = new Vector2(10f, 0f);
-                rt.sizeDelta = new Vector2(28f, 28f);
-                // 이름 글자를 견본 오른쪽으로 밀기
-                Text label = row.transform.Find("Label").GetComponent<Text>();
-                label.rectTransform.offsetMin = new Vector2(48f, label.rectTransform.offsetMin.y);
-            }
+            // 왼쪽 색 견본. 기본 옵션은 에셋 원본 색이라 견본 대신 테두리만
+            Image swatch = UIFactory.CreatePanel(row.transform, "Swatch", item.isDefault ? new Color(1f, 1f, 1f, 0.15f) : item.color);
+            swatch.raycastTarget = false;
+            RectTransform rt = swatch.rectTransform;
+            rt.anchorMin = rt.anchorMax = new Vector2(0f, 0.5f);
+            rt.pivot = new Vector2(0f, 0.5f);
+            rt.anchoredPosition = new Vector2(10f, 0f);
+            rt.sizeDelta = new Vector2(28f, 28f);
+            Text label = row.transform.Find("Label").GetComponent<Text>();
+            label.rectTransform.offsetMin = new Vector2(48f, label.rectTransform.offsetMin.y);
 
-            row.onClick.AddListener(() => Select(entry, captured));
+            row.onClick.AddListener(() => config.Select(captured));
+            rows.Add((item, (Image)row.targetGraphic));
         }
+        PaintRows();
     }
 
-    private void Select(PartEntry entry, OptionItem item)
+    private void PaintRows()
     {
-        if (entry.target != null) entry.target.Apply(item);   // FR-29: 1초 이내 반영
-        selected[entry.part] = item;                          // 파트마다 하나만
+        if (config == null) return;
+        foreach (var (item, bg) in rows)
+            if (bg != null) bg.color = config.IsSelected(item) ? UIFactory.SelectedColor : UIFactory.ButtonColor;
+    }
 
-        int total = 0;
-        foreach (OptionItem o in selected.Values) total += o.extraCost;
-        if (hud != null) hud.SetCost(total);                  // FR-31
-
-        Debug.Log($"[옵션] {entry.label} → {item.displayName} (합계 +{total:N0}원)");
-        RebuildList();
+    private void HandleOptionChanged(OptionItem item)
+    {
+        if (IsOpen()) PaintRows();
     }
 }

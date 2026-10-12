@@ -26,9 +26,15 @@ public class OptionPart : MonoBehaviour, IClickable
     [SerializeField] private Material sourceMaterial;
     [Tooltip("비워 두면 씬 전체에서 sourceMaterial을 쓰는 렌더러를 자동으로 찾음")]
     [SerializeField] private Renderer[] renderers;
+    [Tooltip("이름 앞부분으로 대상 찾기 (예: sm_plant_|sm_pot). 채우면 renderers 목록 대신 Play 시작 때 이 이름 + sourceMaterial로 찾는다")]
+    [SerializeField] private string namePrefixes;
 
     [Header("모델 교체형")]
     [SerializeField] private Transform modelSlot;
+
+    [Header("클릭")]
+    [Tooltip("켜면 대상 메쉬의 다른 재질 칸(예: 액자의 그림 부분)을 눌러도 이 파트로 본다. 벽·바닥처럼 한 메쉬에 섞인 파트는 끈다.")]
+    [SerializeField] private bool clickWholeRenderer;
 
     [Header("강조")]
     [SerializeField] private float highlightBoost = 1.4f;  // 커서가 올라가면 색을 이만큼 밝게
@@ -72,6 +78,8 @@ public class OptionPart : MonoBehaviour, IClickable
         IEnumerable<Renderer> targets;
         if (modelSlot != null)
             targets = modelSlot.GetComponentsInChildren<Renderer>();
+        else if (!string.IsNullOrEmpty(namePrefixes))
+            targets = FindByPrefix(namePrefixes);
         else if (renderers != null && renderers.Length > 0)
             targets = renderers;
         else if (sourceMaterial != null)
@@ -99,6 +107,16 @@ public class OptionPart : MonoBehaviour, IClickable
 
         if (slots.Count == 0)
             Debug.LogWarning($"[OptionPart] {name}: 바꿀 대상을 못 찾음 (sourceMaterial / renderers / modelSlot 확인)", this);
+    }
+
+    private static List<Renderer> FindByPrefix(string prefixes)
+    {
+        string[] list = prefixes.Split('|');
+        var found = new List<Renderer>();
+        foreach (Renderer r in FindObjectsByType<Renderer>())
+            foreach (string p in list)
+                if (p.Length > 0 && r.name.StartsWith(p)) { found.Add(r); break; }
+        return found;
     }
 
     private void Unregister()
@@ -164,6 +182,11 @@ public class OptionPart : MonoBehaviour, IClickable
         Color c = item.isDefault ? originalColor : item.color;
         if (runtimeMaterial.HasProperty(BaseColorId)) runtimeMaterial.SetColor(BaseColorId, c);
         if (runtimeMaterial.HasProperty(ColorId)) runtimeMaterial.SetColor(ColorId, c);
+
+        // 어떤 메쉬가 바뀌었는지 Console에서 바로 확인 (옵션이 안 바뀐다는 문제 찾기용)
+        var names = new HashSet<string>();
+        foreach (Slot sl in slots) if (sl.renderer != null) names.Add(sl.renderer.name);
+        Debug.Log($"[OptionPart] {name}: {slots.Count}칸 색 변경 → {item.displayName} ({string.Join(", ", names)})", this);
     }
 
     private static Color GetColor(Material m)
@@ -266,7 +289,12 @@ public class OptionPart : MonoBehaviour, IClickable
         if (r == null) return null;
         OptionPart p;
         // 칸을 정확히 알면 그 칸만 본다 (벽·바닥이 한 메쉬에 섞여 있어도 구분됨)
-        if (subMeshIndex >= 0) return bySlot.TryGetValue((r, subMeshIndex), out p) ? p : null;
+        if (subMeshIndex >= 0)
+        {
+            if (bySlot.TryGetValue((r, subMeshIndex), out p)) return p;
+            // 액자·화분 같은 소품: 색을 안 바꾸는 칸을 눌러도 같은 파트 (4.05, 4.06)
+            return byRenderer.TryGetValue(r, out p) && p.clickWholeRenderer ? p : null;
+        }
         return byRenderer.TryGetValue(r, out p) ? p : null;
     }
 }

@@ -1,15 +1,16 @@
 using UnityEngine;
-using UnityEngine.Events;
 using UnityEngine.UI;
 
 /// <summary>
-/// 좌측 상단 메뉴 (FR-11, FR-31 / WBS 3.11 골격)
+/// 좌측 상단 메뉴 (FR-11, FR-31 / WBS 3.11, 4.07, 4.18)
 /// - [옵션] [기록] [초기화] 세로 버튼 + 그 아래 추가 비용 합계
 /// - 패널은 한 번에 하나만. 같은 버튼을 다시 누르면 닫힘.
 ///
-/// 아직 안 붙은 것 (합류 후 연결):
-///   - 비용: 지금은 OptionPanelUI가 SetCost 호출 → ConfigurationState(김찬중 3.09) 합류 후 교체
-///   - 초기화: onResetClicked에 ScenarioManager.ResetScenario를 Inspector로 연결
+/// 10/12 변경
+/// - 옵션 부분 클릭: OptionPart.Clicked → HomeEvents.OnPartClicked 구독
+/// - 비용 합계: HomeEvents.OnOptionChanged를 받으면 ConfigurationState.GetTotalCost()로 갱신
+/// - 초기화: ScenarioManager.ResetScenario() 호출 (없으면 같은 일을 직접),
+///           HomeEvents.OnScenarioReset을 받으면 패널을 모두 닫음 (F5로 초기화해도 닫힘, FR-26 1번)
 /// </summary>
 public class HUDController : MonoBehaviour
 {
@@ -24,38 +25,52 @@ public class HUDController : MonoBehaviour
 
     [Header("추가 비용 합계")]
     [SerializeField] private Text costText;   // 한글 표시가 쉬워서 기본 Text 사용
+    [SerializeField] private ConfigurationState config;
 
-    [Header("초기화 (ScenarioManager 연결)")]
-    public UnityEvent onResetClicked;
+    [Header("초기화")]
+    [SerializeField] private ScenarioManager scenario;
 
     private PanelUI openPanel;
 
     private void Awake()
     {
+        if (config == null) config = FindAnyObjectByType<ConfigurationState>();
+        if (scenario == null) scenario = FindAnyObjectByType<ScenarioManager>();
+
         optionButton.onClick.AddListener(() => TogglePanel(optionPanel));
         logButton.onClick.AddListener(() => TogglePanel(logPanel));
         resetButton.onClick.AddListener(OnResetClicked);
     }
 
-    // FR-03: 옵션 부분을 클릭하면 옵션 패널 열기
-    // (HomeEvents 합류 후엔 HomeEvents.OnPartClicked 구독으로 바꿀 자리)
-    private void OnEnable() => OptionPart.Clicked += HandlePartClicked;
-    private void OnDisable() => OptionPart.Clicked -= HandlePartClicked;
-
-    private void HandlePartClicked(OptionPart part)
+    private void OnEnable()
     {
-        OpenOptionPanel();
-        if (optionPanel is OptionPanelUI op) op.ShowPart(part.part);   // 클릭한 파트 탭으로
+        HomeEvents.OnPartClicked += HandlePartClicked;
+        HomeEvents.OnOptionChanged += HandleOptionChanged;
+        HomeEvents.OnScenarioReset += CloseAllPanels;
+    }
+
+    private void OnDisable()
+    {
+        HomeEvents.OnPartClicked -= HandlePartClicked;
+        HomeEvents.OnOptionChanged -= HandleOptionChanged;
+        HomeEvents.OnScenarioReset -= CloseAllPanels;
     }
 
     private void Start()
     {
         // 시작할 때 패널은 모두 닫힌 상태
-        if (optionPanel != null) optionPanel.Close();
-        if (logPanel != null) logPanel.Close();
-        openPanel = null;
-        SetCost(0);
+        CloseAllPanels();
+        UpdateCost();
     }
+
+    // FR-03: 옵션 부분을 클릭하면 옵션 패널을 열고 그 파트 탭으로
+    private void HandlePartClicked(OptionPart part)
+    {
+        OpenOptionPanel();
+        if (optionPanel is OptionPanelUI op) op.ShowPart(part.part);
+    }
+
+    private void HandleOptionChanged(OptionItem item) => UpdateCost();
 
     /// <summary>같은 패널이면 닫고, 다른 패널이면 기존 것 닫고 새로 열기</summary>
     public void TogglePanel(PanelUI panel)
@@ -92,6 +107,8 @@ public class HUDController : MonoBehaviour
         openPanel = null;
     }
 
+    private void UpdateCost() => SetCost(config != null ? config.GetTotalCost() : 0);
+
     /// <summary>FR-31 "추가 비용 합계 (기본 에셋 대비, 예시 금액)"</summary>
     public void SetCost(int total)
     {
@@ -101,7 +118,15 @@ public class HUDController : MonoBehaviour
 
     private void OnResetClicked()
     {
-        CloseAllPanels();            // FR-26 1번: 열린 패널 닫기
-        onResetClicked?.Invoke();
+        // FR-26 1번: 초기화 사건만 보낸다. 패널 닫기는 OnScenarioReset 구독(CloseAllPanels)에서.
+        if (scenario != null)
+        {
+            scenario.ResetScenario();
+        }
+        else
+        {
+            HomeEvents.Log("시스템", "시나리오 초기화");
+            HomeEvents.RaiseScenarioReset();
+        }
     }
 }

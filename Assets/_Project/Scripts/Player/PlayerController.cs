@@ -13,8 +13,8 @@ using UnityEngine.InputSystem;
 ///   Player (CharacterController, PlayerController)
 ///    └ Main Camera (localPosition y = 1.6)
 ///
-/// 주의: 프로젝트가 Input System 전용(activeInputHandler: 1)이라
-///       옛날 Input.GetKey는 쓰면 에러가 난다. Keyboard.current / Mouse.current 사용.
+/// 주의: 입력은 Input System 패키지 사용 (develop 설정은 Both, 찬중 로봇팔 샘플 때문)
+///       우리 코드는 옛날 Input.GetKey 대신 Keyboard.current / Mouse.current 사용.
 /// </summary>
 [RequireComponent(typeof(CharacterController))]
 public class PlayerController : MonoBehaviour
