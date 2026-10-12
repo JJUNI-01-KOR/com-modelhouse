@@ -320,6 +320,12 @@ internal static class COMDay13
         ReflectionProbe[] probes = UnityEngine.Object.FindObjectsByType<ReflectionProbe>();
         foreach (ReflectionProbe p in probes)
         {
+            // 거울 전용 프로브(COMMirrorProbes)는 직접 찍은 Custom 텍스처를 쓰므로 건드리지 않는다
+            if (p.mode == ReflectionProbeMode.Custom)
+            {
+                r.Note($"{p.name}: Custom(거울 전용) → 그대로 둠");
+                continue;
+            }
             if (p.mode != ReflectionProbeMode.Baked)
             {
                 Undo.RecordObject(p, "COM 5.04");

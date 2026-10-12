@@ -35,8 +35,10 @@ public static class CupRackTool
         if (firstCup == null) { EditorUtility.DisplayDialog("컵 보관대", "CoffeeTask에 컵이 연결돼 있지 않아요.", "확인"); return; }
 
         // 받침대가 없으면 먼저 만든다
-        if (GameObject.Find("Saucer") == null) CoffeeSaucerTool.Build();
-        Transform saucer = GameObject.Find("Saucer").transform;
+        if (GameObject.Find("Saucer") == null && !CoffeeSaucerTool.Build()) return;
+        GameObject saucerGo = GameObject.Find("Saucer");
+        if (saucerGo == null) { EditorUtility.DisplayDialog("컵 보관대", "찻잔 받침대(Saucer)를 만들지 못했어요. Tools → COM → 찻잔 받침대 만들기를 먼저 확인하세요.", "확인"); return; }
+        Transform saucer = saucerGo.transform;
         Transform station = task.transform.parent;
 
         Physics.SyncTransforms();

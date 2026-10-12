@@ -63,8 +63,18 @@ internal static class COMMirrorProbes
             root = new GameObject(RootName);
             Undo.RegisterCreatedObjectUndo(root, "거울 프로브");
         }
-        string probeName = $"RP_Mirror_{index}_{mirror.name}";
+        // 이름은 거울 이름 기준 (순서 번호를 붙이면 찾는 순서가 바뀔 때마다 새 프로브가 생겨 중복됨)
+        string probeName = $"RP_Mirror_{mirror.name}";
         Transform t = root.transform.Find(probeName);
+        // 예전 이름(RP_Mirror_<번호>_<거울>)으로 만든 것: 하나는 이름만 바꿔 재사용, 나머지는 지움
+        var olds = new System.Collections.Generic.List<Transform>();
+        foreach (Transform ch in root.transform)
+            if (ch != t && ch.name.StartsWith("RP_Mirror_") && ch.name.EndsWith("_" + mirror.name)) olds.Add(ch);
+        foreach (Transform o in olds)
+        {
+            if (t == null) { Undo.RecordObject(o.gameObject, "거울 프로브 이름"); o.name = probeName; t = o; }
+            else { r.Note($"중복 거울 프로브 삭제: {o.name}"); Undo.DestroyObjectImmediate(o.gameObject); }
+        }
         ReflectionProbe probe;
         if (t == null)
         {

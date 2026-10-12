@@ -38,6 +38,7 @@ internal static class COMSetupAll
 
         COMSetupTools.AddStructureColliders();   // 빠진 바닥·벽 충돌체만 추가
         r.Note("바닥·벽 충돌체: 빠진 것만 추가");
+        COMWindowColliders.Setup(r);           // 창문 통과 막기 (FR-01)
 
         if (GameObject.Find("COM_UI") == null) { COMSetupTools.BuildUI(); r.Note("UI: 메뉴·옵션 패널·기록 패널·구역 정보 창 생성"); }
         else r.Note("UI: 이미 있음 → 건너뜀 (손으로 바꾼 위치 유지)");

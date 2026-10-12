@@ -44,7 +44,7 @@ internal static class COMEntranceLight
             light.color = new Color(1f, 0.92f, 0.8f);   // 따뜻한 실내등 (약 3,500K)
             light.intensity = 3f;
             light.range = 5f;
-            light.shadows = LightShadows.Soft;
+            light.shadows = LightShadows.None;           // 실시간 그림자는 FPS 부담이 커서 끔 (NFR-01, 다른 구역 조명과 같게)
             r.Note($"현관 조명: {LightName} 생성 (위치 {light.transform.position})");
         }
         else
