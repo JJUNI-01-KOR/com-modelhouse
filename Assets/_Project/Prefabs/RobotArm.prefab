@@ -437,7 +437,7 @@ MonoBehaviour:
   angleTolerance: 10
   ikTimeout: 5
   maxReach: 0.6
-  moveSpeed: 90
+  moveSpeed: 120
   orientationWeight: 0.2
   damping: 0.02
   jointLimitDeg: 270

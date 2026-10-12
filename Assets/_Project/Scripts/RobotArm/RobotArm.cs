@@ -100,7 +100,7 @@ public class RobotArm : MonoBehaviour, IClickable
     [SerializeField] float lineStep = 0.01f;
     [Tooltip("팔이 닿는 수평 거리: 밑동 중심에서 (m). 프리팹 관절 구조로 계산하면 최대 0.65, 무리 없는 범위 0.60")]
     [SerializeField] float reachRadius = 0.62f;
-    [Tooltip("계획한 동작이 식탁·컵·머신·팔끼리 닿으면 콘솔에 경고 (움직임은 바꾸지 않음)")]
+    [Tooltip("계획한 동작이 식탁·컵·머신·팔끼리 닿으면 콘솔에 경고 (움직임은 바꾸지 않음, 에디터에서만)")]
     [SerializeField] bool warnCollisions = true;
     [SerializeField] float reachTolerance = 0.02f;
     [SerializeField] float angleTolerance = 10f;
@@ -560,14 +560,22 @@ public class RobotArm : MonoBehaviour, IClickable
             SolveStepOnRobot(pos, rot, Time.fixedDeltaTime);
         }
         HoldCurrent();
+        // FR-15 도달 허용 오차(2cm) 확인: 시연이 멈추지 않게 실패로 처리하지는 않고 경고만 남긴다
+        float err = Vector3.Distance(tip.position, pos);
+        if (err > reachTolerance)
+            Debug.LogWarning($"[RobotArm] 도달 오차 {err * 100f:F1}cm (허용 {reachTolerance * 100f:F0}cm) 목표 {pos}", this);
     }
 
     // 계획한 동작을 3°마다 검사해 부딪히면 경고만 (어디서 부딪히는지 알려 주는 용도)
     void CheckPath(List<float[]> pathDeg, string what)
     {
-        if (!warnCollisions || !avoidCollisions || pathDeg.Count < 2) return;
+        // 경고 전용이라 에디터에서만 검사 (빌드에서는 계산 비용 0)
+        if (!Application.isEditor || !warnCollisions || !avoidCollisions || pathDeg.Count < 2) return;
         int n = joints.Length;
         var q = new float[n];
+        // 출발·도착 지점 4cm 안은 건너뜀: 컵이 보관대·받침대·물받이에 닿아 있는 건 정상
+        ForwardKinematics(Rad(pathDeg[0]), out Vector3 pStart, out _);
+        ForwardKinematics(Rad(pathDeg[pathDeg.Count - 1]), out Vector3 pEnd, out _);
         for (int k = 0; k + 1 < pathDeg.Count; k++)
         {
             float d = 0f;
@@ -576,10 +584,11 @@ public class RobotArm : MonoBehaviour, IClickable
             for (int s = 1; s <= m; s++)
             {
                 for (int i = 0; i < n; i++) q[i] = Mathf.Lerp(pathDeg[k][i], pathDeg[k + 1][i], s / (float)m) * Mathf.Deg2Rad;
+                ForwardKinematics(q, out Vector3 tq, out _);
+                if (Vector3.Distance(tq, pStart) < 0.04f || Vector3.Distance(tq, pEnd) < 0.04f) continue;
                 if (!CollisionFree(q))
                 {
-                    ForwardKinematics(q, out Vector3 tp, out _);
-                    Debug.LogWarning($"[RobotArm] 경로 충돌 경고: {what} 중 ({lastHit}) 손끝 {tp}", this);
+                    Debug.LogWarning($"[RobotArm] 경로 충돌 경고: {what} 중 ({lastHit}) 손끝 {tq}", this);
                     return;
                 }
             }

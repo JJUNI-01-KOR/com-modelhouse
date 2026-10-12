@@ -49,9 +49,11 @@ public class CoffeeTask : MonoBehaviour
     [Tooltip("컵을 잡을 때 손을 수평보다 아래로 숙이는 각도 (도). 클수록 손목이 높이 떠서 식탁에 안 닿음")]
     [Range(0f, 50f)]
     [SerializeField] float graspPitch = 25f;
-    [Tooltip("커피 머신 추출구 아래로 넣을 때 손 각도 (도). 0 = 수평으로 정면에서 밀어 넣음")]
+    [Tooltip("커피 머신 추출구 아래로 넣을 때 손을 숙이는 각도 (도). 숙이면 손목이 위로 떠서 식탁에 묻히지 않음 (컵은 항상 똑바로)")]
     [Range(0f, 30f)]
-    [SerializeField] float machinePitch = 0f;
+    [SerializeField] float machineTilt = 12f;
+    [Tooltip("커피 머신 앞 진입점을 추출구보다 이만큼 높게 (m). 들어갈 때 살짝 내려가고 빠질 때 들어 올려 컵이 물받이 그릴에 끌리지 않음")]
+    [SerializeField] float machineEntryLift = 0.02f;
     [Tooltip("커피 머신 앞에서 수평으로 밀어 넣기 시작하는 거리 (m)")]
     [SerializeField] float machineEntryDistance = 0.12f;
     [Tooltip("컵 보관대·받침대에서 컵 위 이 높이에서 직선으로 내려와 잡는다 (m)")]
@@ -232,7 +234,7 @@ public class CoffeeTask : MonoBehaviour
 
         // 2. 옮기는 중 → 커피 머신 (앞에서 수평으로 밀어 넣기)
         arm.SetState(ArmState.Carrying);
-        yield return arm.GoToRoutine(Grasp(holderPos), FacingM(holderPos), -ToolForward(holderPos, machinePitch) * machineEntryDistance);
+        yield return arm.GoToRoutine(Grasp(holderPos), FacingM(holderPos), -Direction(holderPos) * machineEntryDistance + Vector3.up * machineEntryLift);
         if (!arm.LastMoveSucceeded) { yield return Fail(); yield break; }
 
         // 3. 커피 받는 중
@@ -340,7 +342,7 @@ public class CoffeeTask : MonoBehaviour
         return Quaternion.AngleAxis(pitch, side) * d;
     }
     Quaternion Facing(Vector3 target) => Quaternion.LookRotation(ToolForward(target, graspPitch), Vector3.up);
-    Quaternion FacingM(Vector3 target) => Quaternion.LookRotation(ToolForward(target, machinePitch), Vector3.up);
+    Quaternion FacingM(Vector3 target) => Quaternion.LookRotation(ToolForward(target, machineTilt), Vector3.up);
     Vector3 Grasp(Vector3 cupPivot) => cupPivot + Vector3.up * graspHeight;
 
     // 초기화 (FR-26 3~5번): 작업 중단, 팔 홈·대기, 머신 대기, 컵 비우고 제자리

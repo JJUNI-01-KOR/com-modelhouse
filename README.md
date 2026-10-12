@@ -15,7 +15,7 @@
 | 언어 | C# |
 | 공간 에셋 | [Modern Apartment](https://assetstore.unity.com/packages/3d/props/interior/modern-apartment-375248) (Zeps3D, URP 전용) — 저장소에 포함하지 않음, 각자 구매 후 Import |
 | 플랫폼 | Windows 10/11 (64비트) |
-| 요구사항 | [SRS v2.5](docs/SRS_COM_v2.5.docx) — 기능 요구사항 13개 (전부 Must) |
+| 요구사항 | [SRS v2.6](docs/SRS_COM_v2.6.docx) — 기능 요구사항 13개 (전부 Must) |
 | 일정 | [WBS](docs/WBS_모델하우스_컨피규레이터.xlsx) |
 
 ---
@@ -29,7 +29,7 @@
 
 ---
 
-## 주요 기능 (SRS v2.5)
+## 주요 기능 (SRS v2.6)
 
 | 기능 | 요구사항 |
 | --- | --- |
@@ -144,7 +144,7 @@ Assets/
 │   └── Settings/      URP, 거울 반사 프로브
 ├── ArmRobot/      Unity 로보틱스 데모의 UR3·그리퍼 (ArticulationBody)
 └── Zeps3D/        Modern Apartment (.gitignore로 제외, 각자 Import)
-docs/              SRS v2.5, WBS, 클래스 다이어그램(drawio)
+docs/              SRS v2.6, WBS, 클래스 다이어그램(drawio)
 ```
 
 ### 에디터 메뉴
@@ -152,6 +152,8 @@ docs/              SRS v2.5, WBS, 클래스 다이어그램(drawio)
 | 메뉴 | 하는 일 |
 | --- | --- |
 | COM → 전체 세팅·점검 | 구역·플레이어·UI·시각 버튼·현관 조명 등 빠진 것만 채우고 점검 결과를 txt로 남김 |
+| Tools → COM → 옵션 카탈로그 만들기 (부록 A-7) | 옵션 목록·색·가격 에셋 생성 |
+| Tools → COM → 커피 스테이션 만들기 (컵·머신) | 컵·커피 머신·CoffeeTask 생성과 연결 |
 | Tools → COM → 로봇팔을 식탁 위에 올리기 | 로봇팔을 아일랜드 식탁 높이에 맞춤 |
 | Tools → COM → 시간대 컨트롤러 붙이기 | TimeOfDayController 생성·연결 |
 | Tools → COM → 로봇팔 색을 집 분위기에 맞추기 | 로봇팔을 오프화이트·차콜·브라스 톤으로 |
@@ -166,7 +168,7 @@ docs/              SRS v2.5, WBS, 클래스 다이어그램(drawio)
 
 1. GitHub에서 빈 저장소 `com-modelhouse` 생성 (README, .gitignore 추가 체크 해제)
 2. Unity Hub → Unity `6000.4.0f1` 설치 → New project → **Universal 3D** → 이름 `com-modelhouse`
-3. 이 README, `.gitignore`, `.gitattributes`를 프로젝트 루트(`Assets` 폴더 옆)에 복사, `docs/SRS_COM_v2.5.docx` 추가
+3. 이 README, `.gitignore`, `.gitattributes`를 프로젝트 루트(`Assets` 폴더 옆)에 복사, `docs/SRS_COM_v2.6.docx` 추가
 4. 버전 관리 설정: **Edit → Project Settings**
    - 왼쪽 목록의 **Version Control** → Mode: **Visible Meta Files** (Unity 6에서는 이게 기본값이라 이미 선택돼 있으면 그대로 둔다)
    - 왼쪽 목록의 **Editor** → Asset Serialization → Mode: **Force Text** (기본값이면 그대로 둔다)
@@ -238,6 +240,7 @@ Unity Hub → Add → Add project from disk → 클론한 폴더 선택 (Unity `
 | 10/12 | 커피 머신이 엉뚱한 곳에서 컵을 받음 | 머신 몸체·추출구를 옮겨 컵 자리와 어긋남 | 시작할 때 컵 자리를 추출구 바로 아래로 자동 정렬 |
 | 10/12 | 로봇팔이 식탁·머신을 뚫고, 마디끼리 겹침 | 매번 IK를 여러 번 풀어 고르는 방식이라 자세 계열이 바뀌며 엉뚱한 길로 이동 | 정해진 이동 패턴(물러나기 → 접기 → 조인트1 회전 → 펴기 → 직선 진입)으로 재설계 |
 | 10/12 | 바꾼 Inspector 기본값이 적용 안 됨 | 씬에 저장된 값이 코드 기본값보다 우선 | 의미가 바뀐 값은 새 필드 이름으로 |
+| 10/12 | 커피 1회가 30초 넘음 (지난 잔 정리 포함 최대 61초) | 싱크대 정리 단계 추가, 관절 회전 속도 90°/초 | 회전 속도 120°/초, SRS v2.6에서 기준을 빈 받침대 30초·정리 포함 60초로 분리 |
 | 10/12 | 두 사람이 고친 MainScene 병합 충돌 | 둘 다 새 오브젝트를 추가해 파일 안 같은 위치에 들어감 | 오브젝트(fileID) 단위로 합치고 참조 끊김 0개 확인 |
 
 ---
