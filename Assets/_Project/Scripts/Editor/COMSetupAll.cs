@@ -6,7 +6,7 @@ using UnityEngine;
 ///
 /// 몇 번을 눌러도 안전하다:
 ///   - 10/8 기본 세팅(구역, 플레이어, 충돌체, UI, 옵션 대상)은 씬에 없을 때만 만든다. 이미 있으면 건너뜀.
-///   - 10/12 세팅(액자·화분, 시스템, 시각 버튼, 기록 패널)은 빠진 것만 채운다.
+///   - 10/12 세팅(액자·화분, 시스템, 시각 버튼, 기록 패널, 현관 조명, 시간대 컨트롤러)은 빠진 것만 채운다.
 ///   - 10/13 화면 품질(NFR-10)·UI 정리(5.08)는 같은 결과로 맞춘다.
 ///   - 마지막에 씬 연결·문 높이(NFR-03)·UI 문구·3클릭을 점검해서 결과를 txt 하나로 남긴다.
 /// 결과 파일: C:\Unity\COM_Evidence\날짜_시각_setup_check.txt (5.10 증거)
@@ -53,6 +53,16 @@ internal static class COMSetupAll
         r.Section("10/12 세팅 — 빠진 것만 채움");
         COMSetup1012.Setup();
         r.Note("액자·화분 대상, COM_System(옵션 상태·초기화), 옵션 패널·HUD 연결, 기록 패널, 시각 버튼 확인");
+
+        // ── 10/12 오후: 현관 조명, 시간대 컨트롤러 ──────────────
+        COMEntranceLight.Setup(r);
+        r.Section("시간대 컨트롤러 (FR-30)");
+        TimeOfDaySetup.Setup();   // 김찬중 코드: 없을 때만 COM_System에 붙이고 햇빛 연결
+        var tod = Object.FindAnyObjectByType<TimeOfDayController>();
+        r.Check(tod != null, tod != null ? $"시간대 컨트롤러: {tod.gameObject.name}에 붙어 있음" : "시간대 컨트롤러: 없음");
+
+        // ── 10/12 오후: 거울 반사 (NFR-10) ──────────────────────
+        COMMirrorProbes.Setup(r);
 
         // ── 11, 12: 10/13 화면 품질·UI 정리 ─────────────────────
         COMDay13.SetupQuality(r);
