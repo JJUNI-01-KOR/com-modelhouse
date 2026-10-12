@@ -53,6 +53,27 @@ public class ConfigurationState : MonoBehaviour
         if (catalog != null) Select(catalog.Find(optionId));
     }
 
+    /// <summary>옵션 초기화 (강사 피드백 10/12): 모든 파트를 기본 옵션으로 되돌린다. 합계 0원.
+    /// 위치 초기화(FR-26)와 별개 — 위치 초기화는 옵션을 그대로 둔다.</summary>
+    public void ResetToDefaults()
+    {
+        if (catalog == null) return;
+        int changed = 0;
+        foreach (PartType part in System.Enum.GetValues(typeof(PartType)))
+        {
+            OptionItem def = catalog.GetDefault(part);
+            if (def == null) continue;
+            if (selected.TryGetValue(part, out OptionItem current) && current == def) continue;
+
+            selected[part] = def;
+            foreach (OptionPart p in parts)
+                if (p != null && p.part == part) p.Apply(def);
+            HomeEvents.RaiseOptionChanged(def);   // 패널 선택 표시·합계 갱신
+            changed++;
+        }
+        HomeEvents.Log("옵션", changed > 0 ? $"옵션 초기화 ({changed}개 파트를 기본으로)" : "옵션 초기화 (바뀐 옵션 없음)");
+    }
+
     public OptionItem GetSelected(PartType part)
     {
         selected.TryGetValue(part, out OptionItem item);

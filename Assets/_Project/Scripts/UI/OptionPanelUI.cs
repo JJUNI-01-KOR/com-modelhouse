@@ -7,6 +7,7 @@ using UnityEngine.UI;
 /// - 위쪽 탭: 파트 (벽지, 바닥재, 주방 상판, 소파 패브릭, 러그, 그림 액자, 화분)
 /// - 아래 목록: 색 견본 + 옵션 이름 + "기본" 또는 "+400,000원", 지금 고른 것은 파란색
 /// - 옵션을 누르면 ConfigurationState.Select → 공간 반영·기록·합계 갱신은 거기서 한다
+/// - 제목 "옵션" 옆 [옵션 초기화] → ConfigurationState.ResetToDefaults (모든 파트 기본, 합계 0원)
 ///
 /// 10/12 변경: 옵션 목록과 선택 상태를 이 패널이 따로 들고 있지 않고
 ///   OptionCatalog(부록 A-7) + ConfigurationState(김찬중 3.09) 하나만 보고 그린다.
@@ -62,6 +63,7 @@ public class OptionPanelUI : PanelUI
             return;   // built를 켜지 않음 → 다음에 열 때 다시 시도
         }
         built = true;
+        EnsureResetButton();
 
         // 씬에 OptionPart가 있고, 카탈로그에 옵션이 있는 파트만 탭으로 (enum 순서 = SRS A-7 순서)
         var partsInScene = new HashSet<PartType>();
@@ -128,6 +130,39 @@ public class OptionPanelUI : PanelUI
             rows.Add((item, (Image)row.targetGraphic));
         }
         PaintRows();
+    }
+
+    // [옵션 초기화]: 패널 제목 "옵션" 바로 오른쪽, 높이는 [닫기]와 같게 (강사 피드백 10/12)
+    // 탭과 상관없이 한 번만 만든다. 글자가 한 줄로 들어가도록 너비만 글자에 맞춘다.
+    private void EnsureResetButton()
+    {
+        if (transform.Find("Btn_ResetOptions") != null) return;
+
+        Vector2 size = new Vector2(80f, 40f);
+        Transform close = transform.Find("Btn_Close");
+        if (close != null) size = ((RectTransform)close).rect.size;
+
+        Button reset = UIFactory.CreateButton(transform, "Btn_ResetOptions", "옵션 초기화", 18);
+        Text label = reset.GetComponentInChildren<Text>();
+        label.horizontalOverflow = HorizontalWrapMode.Overflow;   // 두 줄로 꺾이지 않게
+        float width = Mathf.Max(size.x, label.preferredWidth + 24f);
+
+        // 제목 글자 끝 + 12px
+        float x = 16f;
+        Transform title = transform.Find("Title");
+        if (title != null)
+        {
+            RectTransform tr = (RectTransform)title;
+            Text tt = title.GetComponent<Text>();
+            x = tr.anchoredPosition.x + (tt != null ? tt.preferredWidth : 60f) + 12f;
+        }
+
+        RectTransform rt = (RectTransform)reset.transform;
+        rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0f, 1f);
+        rt.anchoredPosition = new Vector2(x, -10f);   // [닫기]와 같은 높이
+        rt.sizeDelta = new Vector2(width, size.y);
+
+        reset.onClick.AddListener(() => { if (config != null) config.ResetToDefaults(); });
     }
 
     private void PaintRows()

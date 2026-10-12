@@ -216,7 +216,7 @@ public static class COMSetupTools
         UIFactory.AddVertical(menu.gameObject, 8, 10);
         var btnOption = UIFactory.CreateButton(menu.transform, "Btn_Option", "옵션", 22);
         var btnLog    = UIFactory.CreateButton(menu.transform, "Btn_Log", "기록", 22);
-        var btnReset  = UIFactory.CreateButton(menu.transform, "Btn_Reset", "초기화", 22);
+        var btnReset  = UIFactory.CreateButton(menu.transform, "Btn_Reset", "위치 초기화", 22);
         foreach (var b in new[] { btnOption, btnLog, btnReset }) UIFactory.SetLayoutSize(b, height: 56);
         var cost = UIFactory.CreateText(menu.transform, "CostText", "추가 비용 합계\n+0원", 18, TextAnchor.MiddleCenter);
         UIFactory.SetLayoutSize(cost, height: 110);

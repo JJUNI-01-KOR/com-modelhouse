@@ -1,5 +1,6 @@
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.UI;
 
 /// <summary>
 /// 상단 메뉴 COM → 전체 세팅·점검 (1~12 통합, 이 메뉴 하나만 남김)
@@ -54,6 +55,9 @@ internal static class COMSetupAll
         COMSetup1012.Setup();
         r.Note("액자·화분 대상, COM_System(옵션 상태·초기화), 옵션 패널·HUD 연결, 기록 패널, 시각 버튼 확인");
 
+        // ── 10/12 강사 피드백: [초기화] → [위치 초기화] ─────────
+        RenameResetButton(r);
+
         // ── 10/12 오후: 현관 조명, 시간대 컨트롤러 ──────────────
         COMEntranceLight.Setup(r);
         r.Section("시간대 컨트롤러 (FR-30)");
@@ -86,6 +90,22 @@ internal static class COMSetupAll
             UnityEditor.SceneManagement.EditorSceneManager.SaveOpenScenes();
             Lightmapping.BakeAsync();
         }
+    }
+
+    // 이미 만들어진 씬 UI의 버튼 글자만 바꾼다 (동작은 그대로: 옵션은 유지하고 위치·조명·로봇·시각만 처음으로)
+    static void RenameResetButton(COMDay13.Report r)
+    {
+        r.Section("메뉴 버튼 이름 (강사 피드백)");
+        GameObject ui = GameObject.Find("COM_UI");
+        Transform btn = ui != null ? ui.transform.Find("Menu/Btn_Reset") : null;
+        Text label = btn != null ? btn.GetComponentInChildren<Text>(true) : null;
+        if (label == null) { r.Check(false, "COM_UI/Menu/Btn_Reset 버튼을 못 찾음"); return; }
+        if (label.text != "위치 초기화")
+        {
+            Undo.RecordObject(label, "위치 초기화 이름 변경");
+            label.text = "위치 초기화";
+        }
+        r.Check(label.text == "위치 초기화", "좌측 상단 [초기화] → [위치 초기화]");
     }
 
     static bool NeedsZones(GameObject root)
