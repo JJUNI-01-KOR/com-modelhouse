@@ -100,7 +100,7 @@ public class RobotArm : MonoBehaviour, IClickable
     [SerializeField] float lineStep = 0.01f;
     [Tooltip("팔이 닿는 수평 거리: 밑동 중심에서 (m). 프리팹 관절 구조로 계산하면 최대 0.65, 무리 없는 범위 0.60")]
     [SerializeField] float reachRadius = 0.62f;
-    [Tooltip("계획한 동작이 식탁·컵·머신·팔끼리 닿으면 콘솔에 경고 (움직임은 바꾸지 않음)")]
+    [Tooltip("계획한 동작이 식탁·컵·머신·팔끼리 닿으면 콘솔에 경고 (움직임은 바꾸지 않음, 에디터에서만)")]
     [SerializeField] bool warnCollisions = true;
     [SerializeField] float reachTolerance = 0.02f;
     [SerializeField] float angleTolerance = 10f;
@@ -569,7 +569,8 @@ public class RobotArm : MonoBehaviour, IClickable
     // 계획한 동작을 3°마다 검사해 부딪히면 경고만 (어디서 부딪히는지 알려 주는 용도)
     void CheckPath(List<float[]> pathDeg, string what)
     {
-        if (!warnCollisions || !avoidCollisions || pathDeg.Count < 2) return;
+        // 경고 전용이라 에디터에서만 검사 (빌드에서는 계산 비용 0)
+        if (!Application.isEditor || !warnCollisions || !avoidCollisions || pathDeg.Count < 2) return;
         int n = joints.Length;
         var q = new float[n];
         // 출발·도착 지점 4cm 안은 건너뜀: 컵이 보관대·받침대·물받이에 닿아 있는 건 정상
@@ -587,8 +588,7 @@ public class RobotArm : MonoBehaviour, IClickable
                 if (Vector3.Distance(tq, pStart) < 0.04f || Vector3.Distance(tq, pEnd) < 0.04f) continue;
                 if (!CollisionFree(q))
                 {
-                    ForwardKinematics(q, out Vector3 tp, out _);
-                    Debug.LogWarning($"[RobotArm] 경로 충돌 경고: {what} 중 ({lastHit}) 손끝 {tp}", this);
+                    Debug.LogWarning($"[RobotArm] 경로 충돌 경고: {what} 중 ({lastHit}) 손끝 {tq}", this);
                     return;
                 }
             }
