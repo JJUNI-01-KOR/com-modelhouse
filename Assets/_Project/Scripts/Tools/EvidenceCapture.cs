@@ -18,7 +18,7 @@ public class EvidenceCapture : MonoBehaviour
     private static void Create()
     {
         var go = new GameObject("[EvidenceCapture]");
-        go.hideFlags = HideFlags.HideAndDontSave;
+        go.hideFlags = HideFlags.HideInHierarchy;   // HideAndDontSave는 Play를 끝내도 남아서 다음 Play 때 중복 생성됨
         DontDestroyOnLoad(go);
         go.AddComponent<EvidenceCapture>();
     }
@@ -50,7 +50,7 @@ public class EvidenceCapture : MonoBehaviour
     public static void SaveLog()
     {
         var sb = new StringBuilder();
-        var entries = LogPanelUI.Entries;
+        var entries = EventLogger.Entries;
         for (int i = entries.Count - 1; i >= 0; i--)   // 기록 패널과 같은 최신순
             sb.Append(entries[i].time.ToString("HH:mm:ss.fff")).Append('\t')
               .Append(entries[i].target).Append('\t')

@@ -9,7 +9,8 @@ using UnityEngine;
 ///   effect.StartBrew();        // 추출 시작
 ///   ... 5초 ...
 ///   effect.StopBrew();         // 추출 끝
-///   effect.SetCupFilled(cup, true);
+/// 일시정지 중에는 CoffeeMachine.SetPaused → effect.SetPaused로 김도 멈춘다.
+/// 컵에 커피 채우기는 CoffeeMachine.SetFilled가 한다 (SetCupFilled는 테스트용으로 남겨 둠).
 ///
 /// 붙이는 곳: 커피 머신 오브젝트
 ///   CoffeeMachine
@@ -29,6 +30,14 @@ public class CoffeeBrewEffect : MonoBehaviour
     public void StartBrew()
     {
         if (steam != null) steam.Play();
+    }
+
+    /// <summary>일시정지: 김 입자를 그 자리에 멈춤 / 이어서 다시 재생</summary>
+    public void SetPaused(bool paused)
+    {
+        if (steam == null) return;
+        if (paused) steam.Pause(true);
+        else steam.Play(true);
     }
 
     public void StopBrew()

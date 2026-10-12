@@ -21,7 +21,18 @@ public class CoffeeMachine : MonoBehaviour
     const string LegacyCoffeeName = "Coffee";
 
     bool isBrewing;
+    bool paused;
     Coroutine routine;
+
+    // 커피 작업 일시정지 (CoffeeTask가 부름): 추출 시간과 김 연출을 같이 멈춘다
+    public void SetPaused(bool p)
+    {
+        if (paused == p) return;
+        paused = p;
+        if (!isBrewing) return;
+        if (effect != null) effect.SetPaused(p);
+        else if (steam != null) { if (p) steam.Pause(true); else steam.Play(true); }
+    }
 
     [Tooltip("추출구 오브젝트. 비우면 자식 'Spout'을 찾는다. 있으면 Play 시작 때 cupHolder를 추출구 바로 아래로 맞춘다")]
     [SerializeField] Transform spout;
@@ -34,7 +45,7 @@ public class CoffeeMachine : MonoBehaviour
         AlignHolderToSpout();
     }
 
-    // 머신 몸체·추출구를 옮겨도 컵 받는 자리가 추출구 아래를 따라가게 한다 (높이는 cupHolder 그대로)
+    // 머신 몸체·추출구를 옮겨도 컵 받는 자리가 추출구 아래를 따라가게 한다 (높이는 그릴 윗면)
     void AlignHolderToSpout()
     {
         if (spout == null) spout = transform.Find("Spout");
@@ -43,6 +54,24 @@ public class CoffeeMachine : MonoBehaviour
         float half = spout.lossyScale.z * 0.5f;
         Vector3 under = spout.position + (fwd.sqrMagnitude > 1e-6f ? fwd.normalized : Vector3.zero) * Mathf.Max(0f, half - spoutTipInset);
         cupHolder.position = new Vector3(under.x, cupHolder.position.y, under.z);
+        SitHolderOnGrille();
+    }
+
+    // 컵 바닥이 물받이 그릴 속에 묻히지 않게 cupHolder 높이를 그릴 윗면에 맞춘다
+    // (그릴이 없으면 그대로). 컵이 그릴을 뚫고 들어가거나 끌리며 지나가는 것 방지
+    void SitHolderOnGrille()
+    {
+        float top = float.MinValue;
+        Vector3 h = cupHolder.position;
+        foreach (Renderer r in GetComponentsInChildren<Renderer>())
+        {
+            string n = r.name.ToLower();
+            if (!n.Contains("grille") && !n.Contains("griddle")) continue;
+            Bounds b = r.bounds;
+            if (h.x < b.min.x - 0.06f || h.x > b.max.x + 0.06f || h.z < b.min.z - 0.06f || h.z > b.max.z + 0.06f) continue;
+            top = Mathf.Max(top, b.max.y);
+        }
+        if (top > h.y) cupHolder.position = new Vector3(h.x, top + 0.002f, h.z);
     }
 
     void OnEnable() => HomeEvents.OnScenarioReset += ResetMachine;
@@ -61,7 +90,13 @@ public class CoffeeMachine : MonoBehaviour
         if (effect != null) effect.StartBrew();
         else if (steam != null) steam.Play();
 
-        yield return new WaitForSeconds(brewTime);
+        // 일시정지 중에는 추출 시간을 멈춘다
+        float t = 0f;
+        while (t < brewTime)
+        {
+            yield return null;
+            if (!paused) t += Time.deltaTime;
+        }
 
         if (effect != null) effect.StopBrew();
         else if (steam != null) steam.Stop();
@@ -94,6 +129,7 @@ public class CoffeeMachine : MonoBehaviour
         if (routine != null) StopCoroutine(routine);
         routine = null;
         isBrewing = false;
+        paused = false;
         if (effect != null) effect.StopBrew();
         if (steam != null) steam.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
     }

@@ -15,7 +15,7 @@
 | 언어 | C# |
 | 공간 에셋 | [Modern Apartment](https://assetstore.unity.com/packages/3d/props/interior/modern-apartment-375248) (Zeps3D, URP 전용) — 저장소에 포함하지 않음, 각자 구매 후 Import |
 | 플랫폼 | Windows 10/11 (64비트) |
-| 요구사항 | [SRS v2.6](docs/SRS_COM_v2.6.docx) — 기능 요구사항 13개 (전부 Must) |
+| 요구사항 | [SRS v2.7](docs/SRS_COM_v2.7.docx) — 기능 요구사항 13개 (전부 Must) |
 | 일정 | [WBS](docs/WBS_모델하우스_컨피규레이터.xlsx) |
 
 ---
@@ -29,16 +29,16 @@
 
 ---
 
-## 주요 기능 (SRS v2.6)
+## 주요 기능 (SRS v2.7)
 
 | 기능 | 요구사항 |
 | --- | --- |
 | 1인칭 이동, 구역(현관·거실·주방·침실) 정보 표시 | FR-01, FR-02 |
 | 부분 클릭 옵션: 벽·바닥·주방 상판·소파·러그·그림·화분을 클릭하면 옵션 목록 | FR-03 |
 | 구역에 들어가면 조명 켜짐, 나가고 3초 뒤 꺼짐 | FR-04, FR-05 |
-| 좌측 상단 메뉴 [옵션] [기록] [초기화] + 추가 비용 합계 | FR-11, FR-31 |
+| 좌측 상단 메뉴 [옵션] [기록] [위치 초기화] [옵션 초기화] + 추가 비용 합계 | FR-11, FR-31 |
 | 커피 로봇: 클릭하면 컵 꺼내기 → 커피 머신에서 받기(5초) → 받침대에 놓기 | FR-13, FR-15 |
-| 이벤트 기록(밀리초), 초기화(고른 옵션은 유지) | FR-25, FR-26 |
+| 이벤트 기록(밀리초), 위치 초기화(고른 옵션은 유지), 옵션 초기화(모든 파트 기본) | FR-25, FR-26, FR-29 |
 | 옵션 7개 파트 색상 교체 | FR-29-01 ~ FR-29-07 |
 | 시각 버튼으로 햇빛·하늘·환경광·창문 밝기와 구역 조도(lx) 변경 | FR-30 |
 
@@ -89,9 +89,9 @@ v2.5에서 삭제: FR-07 중문 자동 개폐, FR-27 URDF 로봇 불러오기. �
 | W A S D | 이동 (바라보는 방향 기준) |
 | 마우스 오른쪽 버튼 누른 채 끌기 | 시점 회전 |
 | 마우스 왼쪽 클릭 | 버튼, 옵션 부분(옵션 목록), 커피 로봇팔(커피 만들기) |
-| 좌측 상단 메뉴 | [옵션] [기록] [초기화] |
+| 좌측 상단 메뉴 | [옵션] [기록] [위치 초기화] [옵션 초기화] |
 | 우측 상단 시각 버튼 | 06:00 · 09:00 · 12:00 · 18:00 · 22:00 |
-| C (에디터에서만) | 커피 로봇팔 클릭 흉내 |
+| C / X / Z (에디터에서만) | 커피 동작(로봇팔 클릭) / 일시정지·이어서 / 정지 |
 
 ---
 
@@ -104,21 +104,23 @@ flowchart LR
   subgraph 발행
     CS["ConfigurationState<br/>옵션 · 추가 비용 합계"]
     Zone["ZoneVolume<br/>구역 재실 감지"]
-    SM[ScenarioManager<br/>초기화]
+    SM[ScenarioManager<br/>위치 초기화]
     CP["CursorPicker<br/>5m 클릭"]
   end
   HE(("HomeEvents"))
   subgraph 구독
     OP["OptionPart<br/>재질 색 교체"]
-    ZL["ZoneLight<br/>구역 조명"]
+    ZL["ZoneLight : LightFader<br/>구역 조명"]
     UI["HUDController · LogPanelUI<br/>ZoneInfoUI · OptionPanelUI"]
+    LG["EventLogger<br/>기록 100건"]
     CT["CoffeeTask<br/>커피 작업 순서"]
   end
   CS --> HE
   Zone --> HE
   SM --> HE
   CP --> HE
-  HE --> OP & ZL & UI & CT
+  HE --> OP & ZL & UI & CT & LG
+  LG -.->|Entries| UI
   CT --> RA["RobotArm<br/>IK · 이동 패턴"] & CM["CoffeeMachine<br/>추출 · 증기"]
   CL[ClockUI 시각 버튼] -.->|ITimeOfDay| TD["TimeOfDayController<br/>햇빛 · 하늘 · 창문 · 조도"]
 ```
@@ -130,10 +132,10 @@ Assets/
 ├── Scenes/        MainScene.unity (메인), Test_RobotArm.unity, Test_Sensors.unity
 ├── _Project/
 │   ├── Scripts/
-│   │   ├── Core/      HomeEvents, IClickable, ITimeOfDay, ScenarioManager, ZoneData, ZoneVolume
+│   │   ├── Core/      HomeEvents, EventLogger, IClickable, ITimeOfDay, ScenarioManager, ZoneData, ZoneVolume
 │   │   ├── Player/    PlayerController (1인칭), CursorPicker
 │   │   ├── Options/   OptionCatalog, OptionItem, ConfigurationState, OptionPart, PartType
-│   │   ├── Devices/   CoffeeMachine, CoffeeBrewEffect, ZoneLight, TimeOfDayController
+│   │   ├── Devices/   CoffeeMachine, CoffeeBrewEffect, LightFader, ZoneLight, TimeOfDayController
 │   │   ├── RobotArm/  RobotArm, CoffeeTask
 │   │   ├── UI/        HUDController, PanelUI, ClockUI, LogPanelUI, OptionPanelUI, ZoneInfoUI
 │   │   ├── Tools/     EvidenceCapture
@@ -144,7 +146,7 @@ Assets/
 │   └── Settings/      URP, 거울 반사 프로브
 ├── ArmRobot/      Unity 로보틱스 데모의 UR3·그리퍼 (ArticulationBody)
 └── Zeps3D/        Modern Apartment (.gitignore로 제외, 각자 Import)
-docs/              SRS v2.6, WBS, 클래스 다이어그램(drawio)
+docs/              SRS v2.7, WBS, 클래스 다이어그램(drawio)
 ```
 
 ### 에디터 메뉴
@@ -168,7 +170,7 @@ docs/              SRS v2.6, WBS, 클래스 다이어그램(drawio)
 
 1. GitHub에서 빈 저장소 `com-modelhouse` 생성 (README, .gitignore 추가 체크 해제)
 2. Unity Hub → Unity `6000.4.0f1` 설치 → New project → **Universal 3D** → 이름 `com-modelhouse`
-3. 이 README, `.gitignore`, `.gitattributes`를 프로젝트 루트(`Assets` 폴더 옆)에 복사, `docs/SRS_COM_v2.6.docx` 추가
+3. 이 README, `.gitignore`, `.gitattributes`를 프로젝트 루트(`Assets` 폴더 옆)에 복사, `docs/SRS_COM_v2.7.docx` 추가
 4. 버전 관리 설정: **Edit → Project Settings**
    - 왼쪽 목록의 **Version Control** → Mode: **Visible Meta Files** (Unity 6에서는 이게 기본값이라 이미 선택돼 있으면 그대로 둔다)
    - 왼쪽 목록의 **Editor** → Asset Serialization → Mode: **Force Text** (기본값이면 그대로 둔다)
@@ -241,6 +243,8 @@ Unity Hub → Add → Add project from disk → 클론한 폴더 선택 (Unity `
 | 10/12 | 로봇팔이 식탁·머신을 뚫고, 마디끼리 겹침 | 매번 IK를 여러 번 풀어 고르는 방식이라 자세 계열이 바뀌며 엉뚱한 길로 이동 | 정해진 이동 패턴(물러나기 → 접기 → 조인트1 회전 → 펴기 → 직선 진입)으로 재설계 |
 | 10/12 | 바꾼 Inspector 기본값이 적용 안 됨 | 씬에 저장된 값이 코드 기본값보다 우선 | 의미가 바뀐 값은 새 필드 이름으로 |
 | 10/12 | 커피 1회가 30초 넘음 (지난 잔 정리 포함 최대 61초) | 싱크대 정리 단계 추가, 관절 회전 속도 90°/초 | 회전 속도 120°/초, SRS v2.6에서 기준을 빈 받침대 30초·정리 포함 60초로 분리 |
+| 10/12 | 시각 버튼을 누를 때 프레임이 튐 | 환경광 갱신 때 기본 반사 큐브맵(1024)도 다시 그림 (추정) | 반사 해상도 128로, 적용 시간·프레임을 콘솔에 남겨 확인 |
+| 10/12 | 커피 머신 앞에서 컵이 물받이 그릴에 끌림 | 컵 자리 높이가 그릴 윗면보다 낮았음 | 시작할 때 컵 자리를 그릴 윗면에 맞춤 |
 | 10/12 | 두 사람이 고친 MainScene 병합 충돌 | 둘 다 새 오브젝트를 추가해 파일 안 같은 위치에 들어감 | 오브젝트(fileID) 단위로 합치고 참조 끊김 0개 확인 |
 
 ---
