@@ -16,7 +16,31 @@ using UnityEngine.InputSystem;
 //   5) 일자 홈 → 대기, "커피 완료". 커피 잔은 다음 클릭 때까지 받침대에 둔다
 // 모든 이동은 RobotArm.GoToRoutine의 정해진 패턴(물러나기 → 운반 자세 → 조인트1 회전 → 펴기 → 직선 진입)을 쓴다.
 // 실패(팔이 안 닿음): 작업 실패 → 컵 보관대로 → 홈 → 대기
+// 일시정지(TogglePause): 팔·머신이 그 자리에서 멈추고, 다시 부르면 이어서 진행 (UI [일시정지])
+// 정지(Stop): 작업 중단 → 들고 있던 컵은 집었던 자리에 다시 내려놓음 → 홈 → 대기 (UI [정지])
+// 작업 단계(CoffeeStep)는 이 클래스만 바꾼다. 팔은 이동 명령(GoToRoutine 등)만 받고, 팔 상태(arm.State)는 읽기만 한다.
 // 위치는 모두 "컵 피벗(바닥 가운데)" 기준이다.
+
+// 커피 작업 단계 (SRS 6장 "커피 작업 상태 전이"). 기록 문구는 "로봇팔 상태 변경: 집는 중" 그대로 (TC-16)
+public enum CoffeeStep { Idle, Picking, Carrying, WaitingBrew, Placing, Failed }
+
+public static class CoffeeStepExtensions
+{
+    public static string ToKorean(this CoffeeStep step)
+    {
+        switch (step)
+        {
+            case CoffeeStep.Idle: return "대기";
+            case CoffeeStep.Picking: return "집는 중";
+            case CoffeeStep.Carrying: return "옮기는 중";
+            case CoffeeStep.WaitingBrew: return "커피 받는 중";
+            case CoffeeStep.Placing: return "놓는 중";
+            case CoffeeStep.Failed: return "작업 실패";
+            default: return step.ToString();
+        }
+    }
+}
+
 public class CoffeeTask : MonoBehaviour
 {
     [SerializeField] string logTarget = "주방";
@@ -61,14 +85,27 @@ public class CoffeeTask : MonoBehaviour
     [Range(0f, 1f)]
     [SerializeField] float gripAmount = 0.6f;
 
-    [Header("테스트")]
-    [Tooltip("Play 중 C 키로 로봇팔 클릭을 흉내 낸다 (에디터에서만)")]
+    [Header("키 조작 (식탁 안내판과 같음)")]
+    [Tooltip("C = 동작(로봇팔 클릭), X = 일시정지/이어서 진행, Z = 정지. 시연 빌드에서도 동작")]
     [SerializeField] bool testKey = true;
+    [Tooltip("로봇팔에서 이 거리(m) 안에 들어오면 상호작용 패널이 뜨고 C(동작)를 받는다. X·Z는 작업 중이면 어디서든")]
+    [SerializeField] float interactDistance = 2.5f;
+
+    public float InteractDistance => interactDistance;
 
     bool isRunning;
+    bool stopping;
+    bool paused;
     Coroutine routine;
+    CoffeeStep step = CoffeeStep.Idle;
+
+    public CoffeeStep Step => step;
+    public bool IsRunning => isRunning;
+    public bool IsPaused => paused;
     Transform current;                       // 이번에 쓰는 컵
     Transform onSaucer;                      // 받침대에 놓여 있는 지난 잔
+    Pose pickedFrom;                         // 들고 있는 컵을 집은 자리 (정지하면 여기에 다시 내려놓음)
+    bool pickedFromSaucer;                   // 받침대에서 집은 지난 잔인지 (아니면 보관대 컵)
     int nextRack;                            // 다음에 꺼낼 보관대 컵 번호
     readonly Dictionary<Transform, Pose> homePose = new Dictionary<Transform, Pose>();
     readonly HashSet<Transform> inRack = new HashSet<Transform>();
@@ -118,11 +155,22 @@ public class CoffeeTask : MonoBehaviour
 #if ENABLE_INPUT_SYSTEM
     void Update()
     {
-        // C 키 테스트는 에디터에서만 (시연 빌드에서는 자동으로 꺼짐)
-        if (testKey && Application.isEditor && Keyboard.current != null && Keyboard.current.cKey.wasPressedThisFrame)
-            HomeEvents.RaiseArmClicked(arm);
+        if (!testKey || Keyboard.current == null) return;
+        if (Keyboard.current.cKey.wasPressedThisFrame && IsNearArm()) Run();                     // C: 동작 (로봇팔 클릭과 같음)
+        if (Keyboard.current.xKey.wasPressedThisFrame) TogglePause();                     // X: 일시정지 / 이어서
+        if (Keyboard.current.zKey.wasPressedThisFrame) Stop();                            // Z: 정지
     }
 #endif
+
+    // 시점(카메라)이 로봇팔 가까이 있는지 (C 키, 조작 패널 표시에 사용)
+    public bool IsNearArm()
+    {
+        Camera cam = Camera.main;
+        if (cam == null || arm == null) return Application.isEditor;
+        Vector3 a = cam.transform.position, b = arm.BasePosition;
+        a.y = b.y = 0f;                        // 키 높이와 상관없이 바닥 거리로
+        return Vector3.Distance(a, b) <= interactDistance;
+    }
 
     void OnArmClicked(RobotArm clicked)
     {
@@ -148,7 +196,8 @@ public class CoffeeTask : MonoBehaviour
                                     : cup != null && cup.gameObject.activeInHierarchy;
 
     public bool CanStart() => !isRunning && arm != null && machine != null
-                              && arm.GetState() == ArmState.Idle && !machine.IsBrewing();
+                              && arm.isActiveAndEnabled && arm.IsReady
+                              && arm.State != ArmState.Moving && !machine.IsBrewing();
 
     public void Run()
     {
@@ -157,7 +206,81 @@ public class CoffeeTask : MonoBehaviour
         routine = StartCoroutine(Sequence());
     }
 
-    public void Cancel() => ResetTask();
+    // 작업 단계는 여기서만 바꾼다. 바뀔 때만 기록 (문구는 예전과 같음)
+    void SetStep(CoffeeStep s)
+    {
+        if (step == s) return;
+        step = s;
+        HomeEvents.Log(arm != null ? arm.DisplayName : logTarget, "로봇팔 상태 변경: " + s.ToKorean());
+    }
+
+    // 일시정지 (UI [일시정지] 버튼): 팔·커피 머신이 그 자리에서 멈춘다. 다시 부르면 하던 곳부터 이어서 진행
+    [ContextMenu("테스트: 일시정지 / 이어서")]
+    public void TogglePause()
+    {
+        if (!isRunning || stopping) return;
+        SetPaused(!paused);
+    }
+
+    public void SetPaused(bool p)
+    {
+        if (!isRunning || stopping || paused == p) return;
+        paused = p;
+        arm.SetPaused(p);
+        machine.SetPaused(p);
+        HomeEvents.Log(logTarget, p ? "커피 작업 일시정지" : "커피 작업 이어서 진행");
+    }
+
+    // 정지 (UI [정지] 버튼): 하던 작업을 끝낸다. 컵을 들고 있으면 집었던 자리에 다시 내려놓고, 팔은 홈으로
+    [ContextMenu("테스트: 정지")]
+    public void Stop()
+    {
+        if (!isRunning || stopping) return;
+        if (paused) { paused = false; arm.SetPaused(false); machine.SetPaused(false); }
+        if (routine != null) StopCoroutine(routine);
+        routine = StartCoroutine(StopRoutine());
+    }
+
+    IEnumerator StopRoutine()
+    {
+        stopping = true;
+        HomeEvents.Log(logTarget, "커피 작업 정지");
+        arm.Stop();
+        machine.ResetMachine();
+
+        if (arm.IsHolding && current != null)
+        {
+            // 들고 있던 컵은 집었던 자리에 다시 내려놓는다 (보관대 컵은 빈 컵으로, 받침대의 지난 잔은 받침대로)
+            Transform c = current;
+            Vector3 back = pickedFrom.position;
+            SetStep(CoffeeStep.Placing);
+            yield return arm.GoToRoutine(Grasp(back), Facing(back), Vector3.up * approachAbove);
+            arm.Release();
+            // 팔이 제자리까지 못 갔어도 컵은 항상 집었던 자리에 둔다 (공중에 떠 있지 않게)
+            if (!arm.LastMoveSucceeded) Debug.LogWarning("[CoffeeTask] 정지: 컵 제자리까지 이동 실패 → 컵만 제자리로 옮김", this);
+            c.SetPositionAndRotation(pickedFrom.position, pickedFrom.rotation);
+            yield return arm.SetGripRoutine(0f);
+            if (pickedFromSaucer) onSaucer = c;
+            else ReturnToRack(c);
+            HomeEvents.Log(logTarget, "들고 있던 컵을 제자리에 내려놓음");
+        }
+        else if (current != null)
+        {
+            if (arm.IsHolding) arm.Release();
+            if (current == onSaucer) { /* 아직 안 집은 지난 잔: 받침대에 그대로 */ }
+            else ReturnToRack(current);       // 아직 안 집은 보관대 컵: 보관대 예약만 되돌림
+        }
+        else if (arm.IsHolding) arm.Release();
+
+        yield return arm.SetGripRoutine(0f);
+        yield return arm.GoHomeRoutine();
+        arm.SetIgnore();
+        SetStep(CoffeeStep.Idle);
+        current = null;
+        stopping = false;
+        isRunning = false;
+        routine = null;
+    }
 
     IEnumerator Sequence()
     {
@@ -171,28 +294,36 @@ public class CoffeeTask : MonoBehaviour
             Transform old = onSaucer;
             current = old;
             arm.SetIgnore(old);
-            arm.SetState(ArmState.Picking);
+            SetStep(CoffeeStep.Picking);
             yield return arm.SetGripRoutine(0f);
             Vector3 p = old.position;
             yield return arm.GoToRoutine(Grasp(p), Facing(p), Vector3.up * approachAbove);
             if (!arm.LastMoveSucceeded) { yield return Fail(); yield break; }
             yield return arm.SetGripRoutine(gripAmount);
             arm.Grab(old);
+            pickedFrom = new Pose(p, old.rotation); pickedFromSaucer = true;
             onSaucer = null;
 
-            arm.SetState(ArmState.Carrying);
+            SetStep(CoffeeStep.Carrying);
             Vector3 s = SinkCupPos();
             Vector3 drop = s + Vector3.up * sinkReleaseAbove;
             yield return arm.GoToRoutine(Grasp(drop), Facing(drop), Vector3.up * approachAbove);
             if (!arm.LastMoveSucceeded) { yield return Fail(); yield break; }
-            arm.SetState(ArmState.Placing);
+            SetStep(CoffeeStep.Placing);
+            yield return WaitPause();
             arm.Release();
             old.SetPositionAndRotation(SinkBottom(s), Quaternion.Euler(0f, old.eulerAngles.y, 0f));
             machine.SetFilled(old, false);
-            yield return arm.SetGripRoutine(0f);
-            HomeEvents.Log(logTarget, "지난 잔을 싱크대에 넣음");
             inSink.Add(old);
-            current = null;
+            current = null;                    // 놓은 뒤에는 정지해도 싱크대에 그대로
+            HomeEvents.Log(logTarget, "지난 잔을 싱크대에 넣음");
+            yield return arm.SetGripRoutine(0f);
+        }
+        else if (onSaucer != null)
+        {
+            // 싱크대를 안 쓰거나 못 찾음: 지난 잔은 보관대 제자리로 (받침대에 컵이 쌓이거나 컵이 바닥나지 않게)
+            ReturnToRack(onSaucer);
+            onSaucer = null;
         }
 
         // 1. 집는 중: 보관대의 다음 컵
@@ -210,7 +341,7 @@ public class CoffeeTask : MonoBehaviour
         {
             Debug.LogWarning("[CoffeeTask] 보관대에 쓸 컵이 없어요", this);
             yield return arm.GoHomeRoutine();
-            arm.SetState(ArmState.Idle);
+            SetStep(CoffeeStep.Idle);
             isRunning = false; routine = null;
             yield break;
         }
@@ -224,42 +355,52 @@ public class CoffeeTask : MonoBehaviour
         if (!arm.CanReach(Grasp(holderPos))) Debug.LogWarning($"[CoffeeTask] 커피 머신 컵 자리가 팔이 닿는 범위 밖: 로봇에서 {Flat(holderPos):F2}m", this);
         if (!arm.CanReach(Grasp(placePos))) Debug.LogWarning($"[CoffeeTask] 받침대가 팔이 닿는 범위 밖: 로봇에서 {Flat(placePos):F2}m", this);
 
-        arm.SetState(ArmState.Picking);
+        SetStep(CoffeeStep.Picking);
         yield return arm.SetGripRoutine(0f);
         Vector3 pick = c.position;
         yield return arm.GoToRoutine(Grasp(pick), Facing(pick), Vector3.up * approachAbove);
         if (!arm.LastMoveSucceeded) { yield return Fail(); yield break; }
         yield return arm.SetGripRoutine(gripAmount);
         arm.Grab(c);
+        pickedFrom = new Pose(pick, c.rotation); pickedFromSaucer = false;
 
         // 2. 옮기는 중 → 커피 머신 (앞에서 수평으로 밀어 넣기)
-        arm.SetState(ArmState.Carrying);
+        SetStep(CoffeeStep.Carrying);
         yield return arm.GoToRoutine(Grasp(holderPos), FacingM(holderPos), -Direction(holderPos) * machineEntryDistance + Vector3.up * machineEntryLift);
         if (!arm.LastMoveSucceeded) { yield return Fail(); yield break; }
 
         // 3. 커피 받는 중
-        arm.SetState(ArmState.WaitingBrew);
+        SetStep(CoffeeStep.WaitingBrew);
+        yield return WaitPause();
         machine.Brew(c);
         while (machine.IsBrewing()) yield return null;
 
         // 4. 옮기는 중 → 놓는 중: 받침대
-        arm.SetState(ArmState.Carrying);
+        SetStep(CoffeeStep.Carrying);
         yield return arm.GoToRoutine(Grasp(placePos), Facing(placePos), Vector3.up * approachAbove);
         if (!arm.LastMoveSucceeded) { yield return Fail(); yield break; }
-        arm.SetState(ArmState.Placing);
+        SetStep(CoffeeStep.Placing);
+        yield return WaitPause();
         arm.Release();
         c.SetPositionAndRotation(placePos, placeRot);
-        yield return arm.SetGripRoutine(0f);
         onSaucer = c;
+        current = null;                        // 놓은 뒤에는 정지해도 받침대에 그대로
+        yield return arm.SetGripRoutine(0f);
 
         // 5. 일자 홈 → 대기
         yield return arm.GoHomeRoutine();
         arm.SetIgnore();
-        arm.SetState(ArmState.Idle);
+        SetStep(CoffeeStep.Idle);
         HomeEvents.Log(logTarget, "커피 완료");
         current = null;
         isRunning = false;
         routine = null;
+    }
+
+    // 일시정지가 풀릴 때까지 대기 (단계 사이에서 일시정지 중에 다음 동작이 시작되지 않게)
+    IEnumerator WaitPause()
+    {
+        while (paused) yield return null;
     }
 
     void ReturnToRack(Transform c)
@@ -273,14 +414,14 @@ public class CoffeeTask : MonoBehaviour
     // 목표에 닿지 못함 → 작업 실패 → 컵 보관대로 → 기본 자세 → 대기 (FR-15 예외)
     IEnumerator Fail()
     {
-        arm.SetState(ArmState.Failed);
+        SetStep(CoffeeStep.Failed);
         if (arm.IsHolding) arm.Release();
         if (current != null) { if (current == onSaucer) onSaucer = null; ReturnToRack(current); }
         machine.ResetMachine();
         yield return arm.SetGripRoutine(0f);
         yield return arm.GoHomeRoutine();
         arm.SetIgnore();
-        arm.SetState(ArmState.Idle);
+        SetStep(CoffeeStep.Idle);
         current = null;
         isRunning = false;
         routine = null;
@@ -345,18 +486,21 @@ public class CoffeeTask : MonoBehaviour
     Quaternion FacingM(Vector3 target) => Quaternion.LookRotation(ToolForward(target, machineTilt), Vector3.up);
     Vector3 Grasp(Vector3 cupPivot) => cupPivot + Vector3.up * graspHeight;
 
-    // 초기화 (FR-26 3~5번): 작업 중단, 팔 홈·대기, 머신 대기, 컵 비우고 제자리
+    // 위치 초기화 (FR-26 5번): 내 작업만 되돌린다 — 작업 중단, 단계 대기, 컵 비우고 보관대로, 내가 건 충돌 제외 해제.
+    // 팔(기본 자세)과 커피 머신(대기)은 각자 OnScenarioReset을 구독해 스스로 되돌아간다.
     public void ResetTask()
     {
         StopAllCoroutines();
         routine = null;
         isRunning = false;
+        stopping = false;
+        paused = false;
+        step = CoffeeStep.Idle;              // 초기화는 단계 변경 기록을 남기지 않음
         nextRack = 0;
         onSaucer = null;
         current = null;
         inSink.Clear();
-        if (arm != null) { if (arm.IsHolding) arm.Release(); arm.ResetArm(); arm.SetIgnore(); }
-        if (machine != null) machine.ResetMachine();
+        if (arm != null) arm.SetIgnore();
         foreach (var kv in homePose) ReturnToRack(kv.Key);
     }
 

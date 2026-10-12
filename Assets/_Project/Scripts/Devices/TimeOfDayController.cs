@@ -4,6 +4,11 @@ using UnityEngine;
 /// <summary>
 /// 시간대 처리 (FR-30, WBS 4.09·4.10, SRS v2.5 부록 A-8) — ITimeOfDay 구현
 /// - 시각 버튼(ClockUI, 권오민)이 SetHour(h)를 부르면 햇빛(방향·색·세기)·하늘·환경광을 그 시각 값으로 바로 바꾼다 (보간 없음)
+/// - 하늘은 skybox로 바꾼다: Procedural skybox의 해 위치·색·노출·대기를 시각마다 바꿔 창밖 하늘이 달라진다
+/// - 실내 밝기는 환경광 세기로 바꾸고, 환경광 색은 하늘색을 조금만(ambientTint) 따라가게 한다
+///   (하늘색을 그대로 쓰면 노을·밤에 로봇팔 같은 물체 색이 바뀌어 보임)
+///   (창유리 발광은 보조로만 사용, dimWindowGlass로 끌 수 있음)
+/// - 프레임 하락 원인 확인: 에디터에서 시각을 바꿀 때마다 적용 시간과 앞뒤 프레임 시간을 콘솔에 남긴다 (logPerformance)
 /// - GetZoneLux(zone) = 창 쪽 햇빛 조도 × 구역 계수(ZoneData.luxFactor) + 300lx × 그 구역 천장 조명 밝기(0~1)
 /// - 이벤트 기록("시각 변경 18:00")은 ClockUI가 남기므로 여기서는 Log 하지 않고 RaiseHourChanged만 보낸다
 /// - 초기화(FR-26 8번): 12:00으로 되돌리고 RaiseHourChanged(12)
@@ -36,6 +41,23 @@ public class TimeOfDayController : MonoBehaviour, ITimeOfDay
     [Tooltip("창유리 재질 (공간 에셋 m_glass는 스스로 빛나는 재질이라 시각에 맞춰 어둡게 해야 함). 비우면 이름으로 찾는다")]
     [SerializeField] Material windowGlass;
     [SerializeField] string windowGlassName = "m_glass";
+    [Tooltip("창유리 발광도 시각에 맞춰 어둡게 (skybox만으로 충분하면 끈다)")]
+    [SerializeField] bool dimWindowGlass = true;
+
+    [Header("하늘 (skybox)")]
+    [Tooltip("하늘 재질. 비우면 씬의 Skybox 재질(기본 Procedural)을 복사해서 쓴다")]
+    [SerializeField] Material skyboxMaterial;
+    [Tooltip("환경광 갱신 때 같이 다시 그리는 기본 반사 큐브맵 해상도. 1024면 시각을 바꿀 때 프레임이 튄다 (실내 반사는 구워 둔 반사 프로브를 씀)")]
+    [SerializeField] int environmentReflectionSize = 128;
+    [Tooltip("실내 물체(로봇팔·컵 등)에 비치는 환경광이 하늘색을 얼마나 따라갈지 (0 = 회색 그대로 밝기만, 1 = 하늘색 그대로). 크면 노을·밤에 로봇팔 색이 변해 보임")]
+    [Range(0f, 1f)]
+    [SerializeField] float ambientTint = 0.15f;
+    [Tooltip("실내 물체(로봇팔·컵)의 환경광 밝기를 시각과 상관없이 고정. 집 벽·바닥은 빛을 구워 둬서 시각이 바뀌어도 그대로인데, 움직이는 물체만 어두워지면 검게 변해 보이므로 맞춘다")]
+    [SerializeField] bool keepIndoorAmbient = true;
+
+    [Header("성능 확인 (에디터에서만)")]
+    [Tooltip("시각을 바꿀 때 적용 시간(ms)과 바꾸기 전·후 30프레임 평균을 콘솔에 남긴다")]
+    [SerializeField] bool logPerformance = true;
 
     // SRS v2.5 부록 A-8 (시뮬레이션 초기값)
     [SerializeField] HourPreset[] presets =
@@ -79,12 +101,21 @@ public class TimeOfDayController : MonoBehaviour, ITimeOfDay
         }
 
         baseAmbient = RenderSettings.ambientIntensity > 0f ? RenderSettings.ambientIntensity : 1f;
-        if (RenderSettings.skybox != null)
+        Material skySource = skyboxMaterial != null ? skyboxMaterial : RenderSettings.skybox;
+        if (skySource != null)
         {
-            skyMat = new Material(RenderSettings.skybox) { name = RenderSettings.skybox.name + " (Runtime)" };
+            skyMat = new Material(skySource) { name = skySource.name + " (Runtime)" };
             if (skyMat.HasProperty("_Exposure")) baseExposure = skyMat.GetFloat("_Exposure");
             RenderSettings.skybox = skyMat;   // 원본 재질 에셋은 건드리지 않음
         }
+        else Debug.LogWarning("[TimeOfDay] Skybox 재질이 없음 → Lighting 창의 Skybox Material 지정 (실내 밝기 변화가 약해짐)", this);
+
+        // 하늘이 햇빛 방향을 따라가고, 환경광·기본 반사를 하늘에서 계산하게 한다 (Play 중에만, 씬 설정은 그대로)
+        if (sun != null) RenderSettings.sun = sun;
+        // 환경광은 하늘에서 직접 계산하지 않고(하늘색이 그대로 물체 색을 바꿈) 하늘 밝기를 따라가는 회색 계열로 둔다
+        RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
+        RenderSettings.defaultReflectionMode = UnityEngine.Rendering.DefaultReflectionMode.Skybox;
+        RenderSettings.defaultReflectionResolution = Mathf.Max(16, environmentReflectionSize);
 
         SetupWindowGlass();
         Apply(startHour);
@@ -144,8 +175,34 @@ public class TimeOfDayController : MonoBehaviour, ITimeOfDay
 
     public void SetHour(int hour)
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         Apply(hour);
+        sw.Stop();
         HomeEvents.RaiseHourChanged(CurrentHour);
+        if (logPerformance && Application.isEditor) StartCoroutine(MeasureFrames(CurrentHour, sw.Elapsed.TotalMilliseconds));
+    }
+
+    // 프레임 시간 기록 (최근 30프레임을 늘 모아 두고, 시각을 바꾼 뒤 30프레임과 비교)
+    readonly Queue<float> recentFrames = new Queue<float>();
+    void Update()
+    {
+        if (!logPerformance) return;
+        recentFrames.Enqueue(Time.unscaledDeltaTime);
+        if (recentFrames.Count > 30) recentFrames.Dequeue();
+    }
+
+    System.Collections.IEnumerator MeasureFrames(int hour, double applyMs)
+    {
+        float before = 0f; foreach (float f in recentFrames) before += f;
+        before = recentFrames.Count > 0 ? before / recentFrames.Count * 1000f : 0f;
+        float worst = 0f, sum = 0f;
+        for (int i = 0; i < 30; i++)
+        {
+            yield return null;
+            float ms = Time.unscaledDeltaTime * 1000f;
+            sum += ms; worst = Mathf.Max(worst, ms);
+        }
+        Debug.Log($"[TimeOfDay] {hour:00}:00 적용 {applyMs:F1}ms, 바꾼 뒤 30프레임 평균 {sum / 30f:F1}ms (가장 긴 프레임 {worst:F1}ms), 바꾸기 전 평균 {before:F1}ms", this);
     }
 
     public float GetZoneLux(ZoneVolume zone)
@@ -182,14 +239,24 @@ public class TimeOfDayController : MonoBehaviour, ITimeOfDay
             sun.enabled = p.sunIntensity > 0f;
         }
 
-        RenderSettings.ambientIntensity = baseAmbient * p.ambient;
+        RenderSettings.ambientIntensity = baseAmbient * (keepIndoorAmbient ? 1f : p.ambient);
+        // 실내 밝기는 시각을 따라가되 색은 거의 회색: 로봇팔·컵 같은 물체 색이 시각마다 바뀌어 보이지 않게
+        Color tint = Color.Lerp(Color.white, p.skyColor, ambientTint);
+        float lum = keepIndoorAmbient ? 1f : Mathf.Max(p.ambient, 0.05f);
+        RenderSettings.ambientSkyColor = tint * (0.85f * lum);
+        RenderSettings.ambientEquatorColor = tint * (0.55f * lum);
+        RenderSettings.ambientGroundColor = new Color(0.22f, 0.21f, 0.2f) * lum;
         if (skyMat != null)
         {
-            if (skyMat.HasProperty("_SkyTint")) skyMat.SetColor("_SkyTint", p.skyColor);
+            // 하늘 자체 색은 시각에 맞게 (창밖으로 보이는 하늘)
+            if (skyMat.HasProperty("_SkyTint")) skyMat.SetColor("_SkyTint", Color.Lerp(new Color(0.5f, 0.5f, 0.5f), p.skyColor, 0.6f));
             if (skyMat.HasProperty("_Tint")) skyMat.SetColor("_Tint", p.skyColor);
             if (skyMat.HasProperty("_Exposure")) skyMat.SetFloat("_Exposure", baseExposure * Mathf.Max(p.ambient, 0.05f));
+            // 해가 낮으면 대기를 두껍게(노을빛), 밤에는 얇게(어두운 하늘)
+            if (skyMat.HasProperty("_AtmosphereThickness"))
+                skyMat.SetFloat("_AtmosphereThickness", p.sunIntensity <= 0f ? 0.4f : p.elevation < 15f ? 1.3f : 1f);
         }
-        if (glassRuntime != null && glassRuntime.HasProperty(EmissionId))
+        if (dimWindowGlass && glassRuntime != null && glassRuntime.HasProperty(EmissionId))
         {
             float mag = Mathf.Max(glassBaseEmission.r, glassBaseEmission.g, glassBaseEmission.b);
             Color tinted = p.skyColor.linear * mag;

@@ -2,26 +2,9 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-// 로봇팔 상태 (SRS 6장 상태 전이)
-public enum ArmState { Idle, Picking, Carrying, WaitingBrew, Placing, Failed }
-
-public static class ArmStateExtensions
-{
-    // 상호작용 창(FR-34)과 이벤트 기록에 쓰는 이름
-    public static string ToKorean(this ArmState state)
-    {
-        switch (state)
-        {
-            case ArmState.Idle: return "대기";
-            case ArmState.Picking: return "집는 중";
-            case ArmState.Carrying: return "옮기는 중";
-            case ArmState.WaitingBrew: return "커피 받는 중";
-            case ArmState.Placing: return "놓는 중";
-            case ArmState.Failed: return "작업 실패";
-            default: return state.ToString();
-        }
-    }
-}
+// 로봇팔 자체의 상태: 팔이 IsMoving / IsHolding으로 스스로 계산한다 (밖에서 바꾸지 않음)
+// 커피 작업 단계(집는 중·옮기는 중·커피 받는 중·놓는 중)는 CoffeeTask의 CoffeeStep
+public enum ArmState { Idle, Moving, Holding }
 
 // ArticulationBody 6축 로봇팔 + IK (FR-15, TC-18)
 // ★ 이동 방식 (공장 로봇처럼 정해진 패턴, 매번 똑같이 움직임)
@@ -33,9 +16,9 @@ public static class ArmStateExtensions
 //     ⑤ 직선으로 들어간다 (컵·받침대는 위에서 아래로, 머신은 앞에서 수평으로)
 //   GoHomeRoutine: ① → ② → ③ → 일자 홈
 // 1) 시작할 때 관절 구조를 읽어 계산용 모델을 만든다.
-// 2) MoveTo: 모델에서 감쇠 최소제곱(DLS) IK로 목표 관절 각도를 먼저 구한다. 못 구하면 바로 실패(팔이 안 닿음).
-// 3) 관절마다 최대 회전 속도(moveSpeed)를 넘지 않게 목표 각도까지 움직인 뒤, 실제 자세로 미세 보정한다.
-// 4) 손끝이 목표에서 2cm 이내면 도착. 1초 동안 실제 자세로 미세 보정.
+// 2) 목표 자세는 모델에서 감쇠 최소제곱(DLS) IK로 구한다. 못 구하면 바로 실패(팔이 안 닿음).
+// 3) 관절마다 최대 회전 속도(moveSpeed)를 넘지 않게 움직인 뒤, 1초 동안 실제 자세로 미세 보정한다.
+// 4) 손끝이 목표에서 2cm를 넘으면 경고만 남긴다 (FR-15).
 // Animation Rigging IK는 Transform을 직접 움직이는 방식이라 물리로 움직이는 ArticulationBody와 맞지 않아 직접 계산한다.
 // 클릭(FR-13 1번): IClickable → CursorPicker(권오민)가 5m 이내에서 강조·클릭을 보내면 HomeEvents.OnArmClicked로 알린다.
 //   로봇팔 링크의 콜라이더를 "Interactable" 레이어로 두어야 커서에 걸린다.
@@ -52,16 +35,8 @@ public class RobotArm : MonoBehaviour, IClickable
     [SerializeField] Transform tip;
     [Tooltip("비우면 자식에서 찾는다 (데모의 PincherController)")]
     [SerializeField] PincherController gripper;
-    [Tooltip("테스트용: 지정하면 대기 중에 손끝이 이 오브젝트를 따라간다")]
-    [SerializeField] Transform ikTarget;
     [Tooltip("홈 자세 관절 각도(도), Base부터 순서대로. 비우면 시작 자세가 홈")]
     [SerializeField] float[] homeAnglesDeg = new float[0];
-    [Tooltip("홈 각도가 비어 있으면 어깨 위로 팔을 접은 준비 자세를 자동으로 홈으로 쓴다")]
-    [SerializeField] bool autoReadyHome = true;
-    [Tooltip("준비 자세 손끝 높이: 어깨에서 위로 (m)")]
-    [SerializeField] float readyHeight = 0.25f;
-    [Tooltip("준비 자세 손끝 거리: 어깨에서 앞으로 (m)")]
-    [SerializeField] float readyForward = 0.15f;
     [Tooltip("들고 있는 물체(컵)를 손 각도와 상관없이 항상 똑바로 세운다")]
     [SerializeField] bool keepHeldUpright = true;
 
@@ -74,7 +49,7 @@ public class RobotArm : MonoBehaviour, IClickable
     [SerializeField] bool lockConfiguration = true;
 
     [Header("충돌 회피 (식탁·컵·커피 머신·로봇 자신)")]
-    [Tooltip("실제 메쉬 크기 상자로 식탁·장애물·로봇 마디끼리 겹치지 않는 자세와 경로만 고른다")]
+    [Tooltip("실제 메쉬 크기 상자로 식탁·장애물·로봇 마디끼리 겹치지 않는 자세만 고른다. 끄면 충돌 경고(CheckPath)도 꺼짐")]
     [SerializeField] bool avoidCollisions = true;
     [Tooltip("장애물을 찾을 부모들. 비우면 씬의 CoffeeStation 아래 전부(머신·컵·받침대·트레이)")]
     [SerializeField] Transform[] obstacleRoots = new Transform[0];
@@ -84,7 +59,7 @@ public class RobotArm : MonoBehaviour, IClickable
     [SerializeField] float selfShrink = 0.015f;
     [Tooltip("시작(대기) 자세를 팔을 위로 곧게 세운 일자 자세로")]
     [SerializeField] bool startStraightUp = true;
-    [Tooltip("방향이 크게 바뀌면 밑동(조인트 1)만 먼저 돌린 뒤 팔을 뻗는다")]
+    [Tooltip("IK 후보 점수 계산 때 '밑동(조인트 1)을 먼저 돌린다'고 보고 중간 자세까지 검사한다. 실제 이동은 항상 정해진 패턴(조인트1 회전 단계 포함)")]
     [SerializeField] bool baseFirst = true;
     [Tooltip("밑동을 먼저 돌리는 기준 각도 (도). 이보다 작게 돌 때는 한 번에 움직임")]
     [SerializeField] float baseFirstMinDeg = 15f;
@@ -104,10 +79,8 @@ public class RobotArm : MonoBehaviour, IClickable
     [SerializeField] bool warnCollisions = true;
     [SerializeField] float reachTolerance = 0.02f;
     [SerializeField] float angleTolerance = 10f;
-    [Tooltip("어깨에서 손끝까지 닿는 거리 (m). UR3는 팔 0.5 + 그리퍼 길이")]
-    [SerializeField] float maxReach = 0.6f;
     [Tooltip("관절 최대 회전 속도 (도/초)")]
-    [SerializeField] float moveSpeed = 90f;
+    [SerializeField] float moveSpeed = 120f;
     [SerializeField] float orientationWeight = 0.2f;
     [SerializeField] float damping = 0.02f;
     [SerializeField] float jointLimitDeg = 270f;
@@ -115,6 +88,10 @@ public class RobotArm : MonoBehaviour, IClickable
     [Header("충돌")]
     [Tooltip("로봇팔이 부딪히지 않고 지나갈 레이어 (식탁·커피 머신이 있는 레이어)")]
     [SerializeField] LayerMask passThroughLayers = ~0;   // 기본: 모든 레이어 통과 (식탁·가구와 부딪히지 않음, 클릭 판정에는 영향 없음)
+
+    [Header("조명")]
+    [Tooltip("햇빛(Directional Light)이 로봇팔을 비추지 않게 한다 → 시각 버튼을 눌러도 로봇팔 색이 노을·밤빛으로 바뀌지 않음. 천장 조명은 그대로 받음 (URP Rendering Layer 1 사용)")]
+    [SerializeField] bool ignoreSunlight = true;
 
     [Header("클릭 강조 (FR-13 1번)")]
     [Tooltip("커서가 올라가면 색을 이만큼 밝게 (OptionPart와 같은 방식)")]
@@ -144,7 +121,6 @@ public class RobotArm : MonoBehaviour, IClickable
     // FK 결과 (관절별 월드 중심·축)
     Vector3[] fkPivot, fkAxis;
 
-    ArmState state = ArmState.Idle;
     Transform heldObject;
     Vector3 heldOffsetPos;
     Quaternion heldOffsetRot;
@@ -156,6 +132,17 @@ public class RobotArm : MonoBehaviour, IClickable
     public bool IsMoving { get; private set; }
     public bool LastMoveSucceeded { get; private set; }
     public bool IsHolding => heldObject != null;
+    public ArmState State => IsMoving ? ArmState.Moving : IsHolding ? ArmState.Holding : ArmState.Idle;
+    // 일시정지: 켜면 그 자리에서 멈춰 기다리고, 끄면 하던 이동을 이어서 한다
+    public bool Paused { get; private set; }
+
+    public void SetPaused(bool paused)
+    {
+        if (Paused == paused) return;
+        Paused = paused;
+        if (paused && ready) HoldCurrent();
+        if (paused && gripper != null) gripper.gripState = GripState.Fixed;
+    }
     public string DisplayName => displayName;
     public Transform Tip => tip;
     public Vector3 BasePosition => joints != null && joints.Length > 0 ? JointPivotNow(0) : transform.position;
@@ -201,6 +188,19 @@ public class RobotArm : MonoBehaviour, IClickable
 
         foreach (ArticulationBody ab in GetComponentsInChildren<ArticulationBody>())
             ab.excludeLayers |= passThroughLayers;
+
+        if (ignoreSunlight) ExcludeFromSunlight();
+    }
+
+    // 로봇팔 렌더러만 Rendering Layer 1에 두고, 햇빛은 그 층을 빼고, 나머지 조명(천장 조명 등)은 그 층도 비추게 한다
+    const int RobotLightLayer = 1 << 1;
+    void ExcludeFromSunlight()
+    {
+        foreach (Renderer r in GetComponentsInChildren<Renderer>(true))
+            r.renderingLayerMask = (uint)RobotLightLayer;
+        foreach (Light l in FindObjectsByType<Light>(FindObjectsInactive.Include))
+            l.renderingLayerMask = l.type == LightType.Directional ? l.renderingLayerMask & ~RobotLightLayer
+                                                                    : l.renderingLayerMask | RobotLightLayer;
     }
 
     IEnumerator Start()
@@ -214,10 +214,9 @@ public class RobotArm : MonoBehaviour, IClickable
         bool hasHome = homeAnglesDeg != null && homeAnglesDeg.Length == n;
         for (int i = 0; i < n; i++) homeDeg[i] = hasHome ? homeAnglesDeg[i] : restRad[i] * Mathf.Rad2Deg;
 
-        // 홈 각도를 안 정했으면: 시작 자세(UR3는 팔을 옆으로 쭉 뻗은 자세)는 식탁·머신에 걸리므로
-        // 어깨 위로 팔을 접어 올린 "준비 자세"를 IK로 구해 홈으로 쓴다
         BuildCollisionModel();
 
+        // 홈 각도를 안 정했으면 일자 자세를 홈으로 쓴다
         if (!hasHome && startStraightUp)
         {
             // 일자 자세: 어깨 관절만 0°/+90°/-90° 중 손끝이 가장 높은 것 (팔 전체가 위로 곧게 선 모양)
@@ -233,17 +232,6 @@ public class RobotArm : MonoBehaviour, IClickable
             for (int i = 0; i < n; i++) homeDeg[i] = restRad[i] * Mathf.Rad2Deg;
             if (n > 1) homeDeg[1] = bestShoulder * Mathf.Rad2Deg;
         }
-        else if (!hasHome && autoReadyHome)
-        {
-            Vector3 shoulder = n > 1 ? JointPivotNow(1) : BasePosition;
-            Vector3 fwd = tip.position - BasePosition; fwd.y = 0f;
-            fwd = fwd.sqrMagnitude > 1e-6f ? fwd.normalized : transform.forward;
-            Vector3 readyPos = shoulder + Vector3.up * readyHeight + fwd * readyForward;
-            if (PlanIK(readyPos, Quaternion.LookRotation(fwd, Vector3.up), out float[] readyDeg))
-                homeDeg = readyDeg;
-            else
-                Debug.LogWarning("[RobotArm] 준비 자세를 못 구해 시작 자세를 홈으로 씀 (readyHeight·readyForward 조정)", this);
-        }
         if (joints.Length >= 5)
         {
             float d = Mathf.DeltaAngle(restRad[4] * Mathf.Rad2Deg, homeDeg[4]);
@@ -256,12 +244,6 @@ public class RobotArm : MonoBehaviour, IClickable
 
     void OnEnable() => HomeEvents.OnScenarioReset += ResetArm;
     void OnDisable() => HomeEvents.OnScenarioReset -= ResetArm;
-
-    void FixedUpdate()
-    {
-        if (ready && ikTarget != null && !IsMoving && state == ArmState.Idle)
-            SolveStepOnRobot(ikTarget.position, ikTarget.rotation, Time.fixedDeltaTime);
-    }
 
     void LateUpdate()
     {
@@ -372,29 +354,6 @@ public class RobotArm : MonoBehaviour, IClickable
         return flat <= reachRadius && pos.y > transform.position.y - 0.05f;
     }
 
-    // 이동을 시작한다. 팔이 닿지 않으면 false. 끝났는지는 IsMoving / LastMoveSucceeded로 본다.
-    public bool MoveTo(Vector3 pos, Quaternion rot)
-    {
-        if (!CanReach(pos)) { LastMoveSucceeded = false; return false; }
-        StartCoroutine(MoveToRoutine(pos, rot));
-        return true;
-    }
-
-    // 지금 자리에서 목표까지 손끝을 직선으로 움직인다 (짧은 이동용).
-    // 작업 코드에서는 yield return arm.MoveToRoutine(...) 후 LastMoveSucceeded를 확인한다.
-    public IEnumerator MoveToRoutine(Vector3 pos, Quaternion rot)
-    {
-        LastMoveSucceeded = false;
-        while (!ready) yield return null;
-        if (!CanReach(pos)) yield break;
-        IsMoving = true;
-        var path = new List<float[]>();
-        bool ok = PlanLine(CurrentRad(), pos, rot, path);
-        if (ok) { CheckPath(path, "직선 이동"); yield return DrivePath(path); yield return FineTune(pos, rot); }
-        LastMoveSucceeded = ok;
-        IsMoving = false;
-    }
-
     // ── 정해진 패턴 이동 ──
     // 지난번 들어온 길 (물러날 때 거꾸로 따라감). 0번이 목표 쪽
     readonly List<Vector3> exitPoints = new List<Vector3>();
@@ -438,17 +397,16 @@ public class RobotArm : MonoBehaviour, IClickable
             IsMoving = false; yield break;
         }
         CheckPath(path, "직선 진입");
-        yield return DrivePath(path);
-        yield return FineTune(pos, rot);
-
+        // 들어가기 시작할 때 물러날 길을 먼저 기록 → 들어가는 도중 정지해도 같은 길로 빠져나온다
         exitPoints.Clear();
         exitPoints.Add(entry);
         exitPoints.Add(above);
+        yield return DrivePath(path);
+        yield return FineTune(pos, rot);
+
         LastMoveSucceeded = true;
         IsMoving = false;
     }
-
-    public void GoHome() => StartCoroutine(GoHomeRoutine());
 
     public IEnumerator GoHomeRoutine()
     {
@@ -468,8 +426,8 @@ public class RobotArm : MonoBehaviour, IClickable
     // ① 들어온 길을 거꾸로 직선으로 (지금 손 방향 유지). 기록이 없으면 손끝이 안전 높이보다 낮을 때만 위로 들어 올림
     IEnumerator Retreat()
     {
+        // 물러나는 도중 정지해도 다음에 같은 길로 빠져나오도록, 기록은 다 물러난 뒤에 지운다
         var pts = new List<Vector3>(exitPoints);
-        exitPoints.Clear();
         if (pts.Count == 0)
         {
             float safe = TableY + travelHeight;
@@ -486,6 +444,7 @@ public class RobotArm : MonoBehaviour, IClickable
             q = Rad(path[path.Count - 1]); first = false;
         }
         if (path.Count > 1) { CheckPath(path, "물러나기"); yield return DrivePath(path); }
+        exitPoints.Clear();
     }
 
     // ② 운반 자세로 접고 ③ 조인트 1만 목표 각도로 돌린다
@@ -557,8 +516,12 @@ public class RobotArm : MonoBehaviour, IClickable
         while (!IsReached(pos, rot) && Time.time - start < 1f)
         {
             yield return new WaitForFixedUpdate();
+            if (Paused) { start += Time.fixedDeltaTime; continue; }
             SolveStepOnRobot(pos, rot, Time.fixedDeltaTime);
         }
+        // 목표에 이미 닿은 채로 일시정지되면 루프를 빠져나오므로, 여기서 풀릴 때까지 기다린다
+        // (안 기다리면 다음 단계(추출·놓기)가 일시정지 중에 진행됨)
+        while (Paused) yield return new WaitForFixedUpdate();
         HoldCurrent();
         // FR-15 도달 허용 오차(2cm) 확인: 시연이 멈추지 않게 실패로 처리하지는 않고 경고만 남긴다
         float err = Vector3.Distance(tip.position, pos);
@@ -613,6 +576,7 @@ public class RobotArm : MonoBehaviour, IClickable
         while (t < duration && total > 0.01f)
         {
             yield return new WaitForFixedUpdate();
+            if (Paused) continue;            // 일시정지 중에는 시간을 멈춘다
             t += Time.fixedDeltaTime;
             float L = Mathf.SmoothStep(0f, 1f, t / duration) * total;
             int k = 1; while (k < m - 1 && cum[k] < L) k++;
@@ -660,37 +624,6 @@ public class RobotArm : MonoBehaviour, IClickable
         carryDeg = (float[])homeDeg.Clone();
     }
 
-    // 큰 방향 전환은 실제 로봇처럼 두 단계로: ① 밑동(조인트 1)만 돌려 목표 쪽을 보고 ② 나머지 관절로 팔을 뻗는다
-    // → 팔 모양을 유지한 채 회전하므로 마디끼리 꼬이거나 엉뚱한 곳을 쓸고 지나가지 않는다
-    IEnumerator DriveBaseFirst(float[] goalDeg)
-    {
-        int n = joints.Length;
-        if (baseFirst && n > 1)
-        {
-            float cur0 = ActualDeg(0);
-            if (Mathf.Abs(goalDeg[0] - cur0) > baseFirstMinDeg)
-            {
-                var step = new float[n];
-                for (int i = 0; i < n; i++) step[i] = ActualDeg(i);
-                step[0] = goalDeg[0];
-                yield return DriveJoints(step);
-            }
-        }
-        yield return DriveJoints(goalDeg);
-    }
-
-    float[] NearestHome()
-    {
-        var g = new float[homeDeg.Length];
-        for (int i = 0; i < g.Length; i++)
-        {
-            float cur = ActualDeg(i);
-            float near = cur + Mathf.DeltaAngle(cur, homeDeg[i]);
-            g[i] = Mathf.Abs(near) <= jointLimitDeg ? near : homeDeg[i];
-        }
-        return g;
-    }
-
     // 그리퍼 닫기(amount 0~1, 1이 완전히 닫힘) / 열기(0)
     public IEnumerator SetGripRoutine(float amount)
     {
@@ -701,6 +634,8 @@ public class RobotArm : MonoBehaviour, IClickable
         float t = 0f;
         while (t < 1.5f)
         {
+            if (Paused) { gripper.gripState = GripState.Fixed; yield return null; continue; }
+            gripper.gripState = closing ? GripState.Closing : GripState.Opening;
             if (closing ? gripper.grip >= target : gripper.grip <= target) break;
             t += Time.deltaTime;
             yield return null;
@@ -745,23 +680,14 @@ public class RobotArm : MonoBehaviour, IClickable
         heldBody = null;
     }
 
-    public void SetState(ArmState s)
-    {
-        if (state == s) return;
-        state = s;
-        HomeEvents.Log(displayName, "로봇팔 상태 변경: " + s.ToKorean());
-        HomeEvents.RaiseArmStateChanged(this, s);
-    }
 
-    public ArmState GetState() => state;
-
-    // 초기화(FR-26 3번): 기본 자세와 대기 상태로 즉시 되돌린다.
-    // 상호작용 창이 "완료"를 띄우지 않게 상태 사건은 보내지 않는다.
+    // 초기화(FR-26 3번): 기본 자세로 즉시 되돌리고 잡은 것을 놓는다 (자기 OnScenarioReset 구독)
     public void ResetArm()
     {
         if (!ready) return;                 // 시작 직후 축 확인 중에는 건너뜀
         StopAllCoroutines();
         IsMoving = false;
+        Paused = false;
         exitPoints.Clear();
         Release();
         SnapToHome();
@@ -770,7 +696,15 @@ public class RobotArm : MonoBehaviour, IClickable
             gripper.gripState = GripState.Fixed;
             gripper.grip = 0f;              // 손가락은 다음 물리 프레임에 열린다
         }
-        state = ArmState.Idle;
+    }
+
+    // 정지: 지금 하던 이동을 그 자리에서 멈춘다 (이동을 돌리던 코루틴은 부른 쪽이 멈춘다).
+    // 들어온 길 기록은 남겨 두므로 다음 이동은 들어온 길을 거꾸로 빠져나온 뒤 시작한다 (머신 안에서 정지해도 안전)
+    public void Stop()
+    {
+        IsMoving = false;
+        Paused = false;
+        if (ready) HoldCurrent();
     }
 
     [ContextMenu("현재 관절 각도 출력 (홈 자세 기록용)")]
@@ -860,7 +794,7 @@ public class RobotArm : MonoBehaviour, IClickable
     int Score(float[] seedRad, float[] qRad, float[] goalDeg)
     {
         if (!PoseOk(qRad, tableClearance)) return 0;
-        // 실제로 움직이는 방식(DriveBaseFirst)과 똑같이 중간 자세를 검사: ① 밑동만 회전 ② 나머지 관절
+        // 밑동 먼저 → 나머지 관절 순서로 움직인다고 보고 중간 자세를 검사 (PlanIK 후보 점수용)
         int n = qRad.Length;
         var mid = new float[n];
         var goal = new float[n];
@@ -921,7 +855,6 @@ public class RobotArm : MonoBehaviour, IClickable
     // 팔 마디끼리 겹치는지 (UR3는 마디가 옆으로 비켜 있어 관절 중심선만으로는 판단이 어려움 → 실제로 부딪히는 경우만 본다)
     //   1) 팔꿈치를 elbowFoldLimit보다 많이 접으면 아래팔이 위팔에 박힘
     //   2) 손(손목 끝~손끝)이 로봇 밑동 기둥에 가까우면 밑동을 뚫음
-    readonly Vector3[] segA = new Vector3[8], segB = new Vector3[8];
     bool SelfClear(float[] q)
     {
         if (joints.Length >= 3)
@@ -1076,7 +1009,7 @@ public class RobotArm : MonoBehaviour, IClickable
             }
         }
 
-        // ③ 로봇 자신: 서로 붙어 있지 않은 링크(번호 차이 2 이상)끼리, 밑동 ↔ 손목·손
+        // ③ 로봇 자신: 서로 붙어 있지 않은 링크(번호 차이 3 이상)끼리, 밑동 ↔ 손목·손
         for (int a = 0; a < m; a++)
         {
             if (linkLocalBox[a].h == Vector3.zero) continue;
@@ -1127,29 +1060,6 @@ public class RobotArm : MonoBehaviour, IClickable
         return true;
     }
 
-    static float SegDist(Vector3 p1, Vector3 q1, Vector3 p2, Vector3 q2)
-    {
-        Vector3 d1 = q1 - p1, d2 = q2 - p2, r = p1 - p2;
-        float a = Vector3.Dot(d1, d1), e = Vector3.Dot(d2, d2), f = Vector3.Dot(d2, r);
-        float s, t;
-        if (a <= 1e-8f && e <= 1e-8f) return r.magnitude;
-        if (a <= 1e-8f) { s = 0f; t = Mathf.Clamp01(f / e); }
-        else
-        {
-            float c = Vector3.Dot(d1, r);
-            if (e <= 1e-8f) { t = 0f; s = Mathf.Clamp01(-c / a); }
-            else
-            {
-                float bb = Vector3.Dot(d1, d2), den = a * e - bb * bb;
-                s = den != 0f ? Mathf.Clamp01((bb * f - c * e) / den) : 0f;
-                t = (bb * s + f) / e;
-                if (t < 0f) { t = 0f; s = Mathf.Clamp01(-c / a); }
-                else if (t > 1f) { t = 1f; s = Mathf.Clamp01((bb - c) / a); }
-            }
-        }
-        return ((p1 + d1 * s) - (p2 + d2 * t)).magnitude;
-    }
-
     // DLS 반복. 남는 자유도는 seed(지금 자세) 쪽으로 당겨 팔이 크게 뒤집히지 않게 한다.
     bool SolveModel(float[] seed, float[] q, Vector3 pos, Quaternion rot)
     {
@@ -1192,7 +1102,6 @@ public class RobotArm : MonoBehaviour, IClickable
     // - 어깨·팔꿈치(1, 2번 관절): 식탁 면 + tableClearance 이상
     // - 첫 손목(3번): 식탁 면 이상
     // - 나머지 손목(4, 5번)은 컵을 옆에서 잡을 때 손끝 높이(식탁 위 5cm)까지 내려와야 하므로 검사하지 않는다
-    bool AboveTable(float[] q) => AboveTable(q, tableClearance);
     bool AboveTable(float[] q, float clearance)
     {
         ForwardKinematics(q, out _, out _);
@@ -1236,6 +1145,7 @@ public class RobotArm : MonoBehaviour, IClickable
         while (t < duration)
         {
             yield return new WaitForFixedUpdate();
+            if (Paused) continue;
             t += Time.fixedDeltaTime;
             float s = Mathf.SmoothStep(0f, 1f, t / duration);
             for (int i = 0; i < n; i++) SetDrive(i, Mathf.Lerp(from[i], goalDeg[i], s));
@@ -1246,6 +1156,8 @@ public class RobotArm : MonoBehaviour, IClickable
         float settle = 0f;
         while (settle < 0.5f)
         {
+            if (Paused) { yield return new WaitForFixedUpdate(); continue; }
+            for (int i = 0; i < n; i++) SetDrive(i, goalDeg[i]);   // 일시정지 뒤 다시 목표로
             bool done = true;
             for (int i = 0; i < n; i++) if (Mathf.Abs(ActualDeg(i) - goalDeg[i]) > 1f) { done = false; break; }
             if (done) break;
@@ -1254,7 +1166,7 @@ public class RobotArm : MonoBehaviour, IClickable
         }
     }
 
-    // 실제 로봇 자세로 DLS 한 걸음 (미세 보정, ikTarget 따라가기)
+    // 실제 로봇 자세로 DLS 한 걸음 (도착 후 미세 보정)
     void SolveStepOnRobot(Vector3 pos, Quaternion rot, float dt)
     {
         int n = joints.Length;
@@ -1395,13 +1307,20 @@ public class RobotArm : MonoBehaviour, IClickable
         for (int i = 0; i < joints.Length; i++) SetJointImmediate(i, homeDeg[i]);
     }
 
-    // 씬 뷰에서 로봇팔을 선택하면 팔이 닿는 범위를 구로 보여 준다 (2.08 배치용)
+    // 씬 뷰에서 로봇팔을 선택하면 팔이 닿는 범위를 원으로 보여 준다 (2.08 배치용)
     void OnDrawGizmosSelected()
     {
-        ArticulationBody[] abs = GetComponentsInChildren<ArticulationBody>();
-        Vector3 center = abs.Length > 2 ? abs[2].transform.position : transform.position;
+        // 밑동 중심에서 수평 reachRadius 원 (식탁 높이)
+        Vector3 c = joints != null && joints.Length > 0 ? BasePosition : transform.position;
+        c.y = transform.position.y;
         Gizmos.color = new Color(0.2f, 1f, 0.4f, 0.6f);
-        Gizmos.DrawWireSphere(center, maxReach);
+        const int seg = 48;
+        for (int i = 0; i < seg; i++)
+        {
+            float a0 = i * Mathf.PI * 2f / seg, a1 = (i + 1) * Mathf.PI * 2f / seg;
+            Gizmos.DrawLine(c + new Vector3(Mathf.Cos(a0), 0f, Mathf.Sin(a0)) * reachRadius,
+                            c + new Vector3(Mathf.Cos(a1), 0f, Mathf.Sin(a1)) * reachRadius);
+        }
         if (tip != null)
         {
             Gizmos.color = Color.blue;
