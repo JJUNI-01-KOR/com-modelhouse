@@ -560,6 +560,10 @@ public class RobotArm : MonoBehaviour, IClickable
             SolveStepOnRobot(pos, rot, Time.fixedDeltaTime);
         }
         HoldCurrent();
+        // FR-15 도달 허용 오차(2cm) 확인: 시연이 멈추지 않게 실패로 처리하지는 않고 경고만 남긴다
+        float err = Vector3.Distance(tip.position, pos);
+        if (err > reachTolerance)
+            Debug.LogWarning($"[RobotArm] 도달 오차 {err * 100f:F1}cm (허용 {reachTolerance * 100f:F0}cm) 목표 {pos}", this);
     }
 
     // 계획한 동작을 3°마다 검사해 부딪히면 경고만 (어디서 부딪히는지 알려 주는 용도)
@@ -568,6 +572,9 @@ public class RobotArm : MonoBehaviour, IClickable
         if (!warnCollisions || !avoidCollisions || pathDeg.Count < 2) return;
         int n = joints.Length;
         var q = new float[n];
+        // 출발·도착 지점 4cm 안은 건너뜀: 컵이 보관대·받침대·물받이에 닿아 있는 건 정상
+        ForwardKinematics(Rad(pathDeg[0]), out Vector3 pStart, out _);
+        ForwardKinematics(Rad(pathDeg[pathDeg.Count - 1]), out Vector3 pEnd, out _);
         for (int k = 0; k + 1 < pathDeg.Count; k++)
         {
             float d = 0f;
@@ -576,6 +583,8 @@ public class RobotArm : MonoBehaviour, IClickable
             for (int s = 1; s <= m; s++)
             {
                 for (int i = 0; i < n; i++) q[i] = Mathf.Lerp(pathDeg[k][i], pathDeg[k + 1][i], s / (float)m) * Mathf.Deg2Rad;
+                ForwardKinematics(q, out Vector3 tq, out _);
+                if (Vector3.Distance(tq, pStart) < 0.04f || Vector3.Distance(tq, pEnd) < 0.04f) continue;
                 if (!CollisionFree(q))
                 {
                     ForwardKinematics(q, out Vector3 tp, out _);
