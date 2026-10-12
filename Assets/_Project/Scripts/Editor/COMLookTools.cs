@@ -92,9 +92,13 @@ public static class COMLookTools
         Undo.RegisterFullObjectHierarchyUndo(machine.gameObject, "커피 머신 새 디자인");
 
         // 기준 자리: 예전 몸체(Body)를 옮겨 둔 자리·방향을 그대로 쓴다 (사용자가 배치한 위치 유지)
+        // 다시 실행하면 Body가 Model 아래에 있으므로, 이미 만든 Model의 자리·방향을 기준으로 쓴다 (원점으로 튀지 않게)
+        Transform oldModel = machine.Find("Model");
         Transform oldBody = machine.Find("Body");
-        Vector3 anchorPos = oldBody != null ? new Vector3(oldBody.localPosition.x, 0f, oldBody.localPosition.z) : Vector3.zero;
-        Quaternion anchorRot = oldBody != null ? Quaternion.Euler(0f, oldBody.localEulerAngles.y, 0f) : Quaternion.identity;
+        Vector3 anchorPos; Quaternion anchorRot;
+        if (oldModel != null) { anchorPos = oldModel.localPosition; anchorRot = oldModel.localRotation; }
+        else if (oldBody != null) { anchorPos = new Vector3(oldBody.localPosition.x, 0f, oldBody.localPosition.z); anchorRot = Quaternion.Euler(0f, oldBody.localEulerAngles.y, 0f); }
+        else { anchorPos = Vector3.zero; anchorRot = Quaternion.identity; }
 
         // 예전 겉모습 지우기 (CupHolder·Steam·Spout 이외 자식, 이전에 만든 Model)
         var keep = new HashSet<string> { "CupHolder", "Steam" };

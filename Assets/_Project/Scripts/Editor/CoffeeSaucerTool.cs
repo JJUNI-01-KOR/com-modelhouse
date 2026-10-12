@@ -7,36 +7,36 @@ using UnityEngine;
 // - 받침대 윗면에 TableSpot을 두고 CoffeeTask의 "커피를 다 받은 컵을 놓을 곳"으로 연결한다
 //   → 로봇이 받침대 위 컵을 집어 커피를 받고, 다시 받침대 위에 놓는다
 // - 받침대를 다른 곳으로 옮기면 커피 받은 컵은 옮긴 받침대 위에 놓인다 (팔이 닿는 범위 안에서)
-// 다시 실행하면 기존 Saucer를 지우고 새로 만든다. Ctrl+Z로 되돌릴 수 있다.
+// 다시 실행하면 기존 Saucer 자리·방향 그대로 새로 만든다 (컵은 다시 옮기지 않음). Ctrl+Z로 되돌릴 수 있다.
 public static class CoffeeSaucerTool
 {
     const float SaucerTop = 0.011f;   // 받침대 윗면 높이 (m)
 
     [MenuItem("Tools/COM/찻잔 받침대 만들기")]
-    public static void Build()
+    static void BuildMenu() => Build();
+
+    // 만들었으면 true. 다시 실행하면 지금 받침대 자리·방향 그대로 다시 만든다 (컵·CupSpot은 다시 옮기지 않음)
+    public static bool Build()
     {
         CoffeeTask task = Object.FindAnyObjectByType<CoffeeTask>();
-        if (task == null) { EditorUtility.DisplayDialog("찻잔 받침대", "씬에 CoffeeTask가 없어요. 먼저 커피 스테이션을 만드세요.", "확인"); return; }
+        if (task == null) { EditorUtility.DisplayDialog("찻잔 받침대", "씬에 CoffeeTask가 없어요. 먼저 커피 스테이션을 만드세요.", "확인"); return false; }
 
         var so = new SerializedObject(task);
         var cup = so.FindProperty("cup").objectReferenceValue as Transform;
         var cupSpot = so.FindProperty("cupSpot").objectReferenceValue as Transform;
-        if (cup == null) { EditorUtility.DisplayDialog("찻잔 받침대", "CoffeeTask에 컵이 연결돼 있지 않아요.", "확인"); return; }
+        bool useRack = so.FindProperty("rackCups").arraySize > 0;      // 컵 보관대를 쓰면 컵은 보관대에 있으므로 옮기지 않음
+        if (cup == null && !useRack) { EditorUtility.DisplayDialog("찻잔 받침대", "CoffeeTask에 컵이 연결돼 있지 않아요.", "확인"); return false; }
 
         Transform station = task.transform.parent != null ? task.transform.parent : null;
 
-        // 기존 받침대 정리 (컵·CupSpot 높이를 원래대로 내린 뒤 다시 만든다)
+        // 기존 받침대가 있으면 그 자리·방향을 그대로 쓰고 다시 만든다 (컵 보관대 메뉴가 옮겨 둔 자리 유지)
         GameObject old = GameObject.Find("Saucer");
-        if (old != null)
-        {
-            Undo.RecordObject(cup, "찻잔 받침대");
-            cup.position -= Vector3.up * SaucerTop;
-            if (cupSpot != null) { Undo.RecordObject(cupSpot, "찻잔 받침대"); cupSpot.position -= Vector3.up * SaucerTop; }
-            Undo.DestroyObjectImmediate(old);
-        }
-
-        Vector3 basePos = cupSpot != null ? cupSpot.position : cup.position;
-        Quaternion baseRot = cupSpot != null ? cupSpot.rotation : cup.rotation;
+        bool rebuild = old != null;
+        Vector3 basePos; Quaternion baseRot;
+        if (rebuild) { basePos = old.transform.position; baseRot = old.transform.rotation; Undo.DestroyObjectImmediate(old); }
+        else if (cupSpot != null) { basePos = cupSpot.position; baseRot = cupSpot.rotation; }
+        else if (cup != null) { basePos = cup.position; baseRot = cup.rotation; }
+        else { basePos = task.transform.position; baseRot = task.transform.rotation; }
 
         Material ceramic = MakeMat("saucer_ceramic", new Color(0.96f, 0.95f, 0.92f), 0.82f);
         Material rim = MakeMat("saucer_rim", new Color(0.69f, 0.55f, 0.34f), 0.75f, 1f);   // 브라스 테두리 (로봇 포인트색과 맞춤)
@@ -58,13 +58,16 @@ public static class CoffeeSaucerTool
         spot.transform.SetParent(saucer.transform, false);
         spot.transform.localPosition = new Vector3(0f, SaucerTop, 0f);
 
-        // 처음 컵도 받침대 위로
-        Undo.RecordObject(cup, "찻잔 받침대");
-        cup.SetPositionAndRotation(basePos + Vector3.up * SaucerTop, baseRot);
-        if (cupSpot != null)
+        // 처음 만들 때만, 보관대를 안 쓰면 컵도 받침대 위로 (다시 실행할 때 컵이 계속 내려가던 문제 방지)
+        if (!rebuild && !useRack && cup != null)
         {
-            Undo.RecordObject(cupSpot, "찻잔 받침대");
-            cupSpot.position = basePos + Vector3.up * SaucerTop;   // 초기화 때도 받침대 위로 돌아오게
+            Undo.RecordObject(cup, "찻잔 받침대");
+            cup.SetPositionAndRotation(basePos + Vector3.up * SaucerTop, baseRot);
+            if (cupSpot != null)
+            {
+                Undo.RecordObject(cupSpot, "찻잔 받침대");
+                cupSpot.position = basePos + Vector3.up * SaucerTop;   // 초기화 때도 받침대 위로 돌아오게
+            }
         }
 
         Undo.RecordObject(task, "찻잔 받침대");
@@ -74,6 +77,7 @@ public static class CoffeeSaucerTool
         EditorSceneManager.MarkSceneDirty(saucer.scene);
         Selection.activeObject = saucer;
         Debug.Log("[Saucer] 찻잔 받침대 완료: 컵을 받침대 위에서 집어 커피를 받고 다시 받침대 위에 놓음. 받침대를 옮기면 놓는 자리도 따라감. Ctrl+S로 저장", saucer);
+        return true;
     }
 
     static void Part(Transform parent, string name, Vector3 pos, Vector3 scale, Material mat)
