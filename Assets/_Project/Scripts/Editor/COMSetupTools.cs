@@ -3,9 +3,10 @@ using UnityEditor;
 using UnityEngine;
 
 /// <summary>
-/// 씬 세팅을 메뉴 한 번으로 해 주는 에디터 도구 (게임 빌드에는 안 들어감)
-///   상단 메뉴 COM → 1. 구역 세팅   : ZoneData 4개 생성 + Zone_* 에 ZoneVolume 연결 (WBS 2.05)
-///   상단 메뉴 COM → 2. 플레이어 세팅 : Player + SpawnPoint 생성, Main Camera를 자식으로 (WBS 3.01~3.03, 3.08)
+/// 10/8 기본 씬 세팅 (게임 빌드에는 안 들어감)
+/// 메뉴는 COM → 전체 세팅·점검 하나로 합침 (COMSetupAll.cs). 여기 단계들은 씬에 없을 때만 실행된다.
+///   구역(ZoneData + ZoneVolume), 플레이어(Player + SpawnPoint), 바닥·벽 충돌체,
+///   옵션 UI(메뉴·옵션 패널·구역 정보 창), 상판·소파·러그 대상
 /// 전부 Ctrl+Z로 되돌릴 수 있음.
 /// </summary>
 public static class COMSetupTools
@@ -24,8 +25,7 @@ public static class COMSetupTools
     };
 
     // ------------------------------------------------------------
-    [MenuItem("COM/1. 구역 세팅 (ZoneData + ZoneVolume)")]
-    private static void SetupZones()
+    internal static void SetupZones()
     {
         GameObject root = GameObject.Find("Zone");
         if (root == null)
@@ -86,8 +86,7 @@ public static class COMSetupTools
     }
 
     // ------------------------------------------------------------
-    [MenuItem("COM/2. 플레이어 세팅 (Player + SpawnPoint)")]
-    private static void SetupPlayer()
+    internal static void SetupPlayer()
     {
         if (Object.FindAnyObjectByType<PlayerController>() != null)
         {
@@ -152,8 +151,7 @@ public static class COMSetupTools
     // 바닥·벽에 충돌체가 빠져 있으면 플레이어가 떨어지거나 벽을 뚫음 (WBS 2.04)
     private static readonly string[] StructurePrefixes = { "sm_floor", "sm_walls" };
 
-    [MenuItem("COM/3. 바닥·벽 충돌체 채우기")]
-    private static void AddStructureColliders()
+    internal static void AddStructureColliders()
     {
         int added = 0, already = 0;
         foreach (MeshFilter mf in Object.FindObjectsByType<MeshFilter>())
@@ -173,163 +171,16 @@ public static class COMSetupTools
     }
 
     // ------------------------------------------------------------
-    // 벽지 색상 4종 (SRS 부록 A-7 이름·가격, 색은 팀 결정으로 색상만)
-    private static readonly (string id, string name, string hex, int cost, bool isDefault)[] WallColors =
+    internal static void AddFurnitureOptions()
     {
-        ("wall_white",  "화이트 페인트",       "#FFFFFF", 0,      true),
-        ("wall_greige", "그레이지 실크 벽지",   "#BDB5A6", 400000, false),
-        ("wall_sage",   "세이지 그린 실크 벽지", "#A3B18A", 400000, false),
-        ("wall_fabric", "패브릭 질감 벽지",     "#D9CFC1", 700000, false),
-    };
-
-    [MenuItem("COM/4. 벽지 테스트 세팅 (색상)")]
-    private static void SetupWallpaperTest()
-    {
-        Material walls = FindMaterial("m_walls");
-        if (walls == null)
-        {
-            EditorUtility.DisplayDialog("COM", "m_walls 재질을 못 찾았어.", "확인");
-            return;
-        }
-
-        GameObject go = GameObject.Find("Option_Wall");
-        if (go == null)
-        {
-            go = new GameObject("Option_Wall");
-            Undo.RegisterCreatedObjectUndo(go, "COM Wallpaper Setup");
-        }
-
-        // OptionPart
-        OptionPart part = go.GetComponent<OptionPart>();
-        if (part == null) part = Undo.AddComponent<OptionPart>(go);
-        var pso = new SerializedObject(part);
-        pso.FindProperty("part").enumValueIndex = (int)PartType.Wall;
-        pso.FindProperty("sourceMaterial").objectReferenceValue = walls;
-        pso.ApplyModifiedProperties();
-
-        // OptionApplyTester (숫자 키 테스트)
-        OptionApplyTester tester = go.GetComponent<OptionApplyTester>();
-        if (tester == null) tester = Undo.AddComponent<OptionApplyTester>(go);
-        var tso = new SerializedObject(tester);
-        tso.FindProperty("target").objectReferenceValue = part;
-        SerializedProperty arr = tso.FindProperty("options");
-        arr.arraySize = WallColors.Length;
-        for (int i = 0; i < WallColors.Length; i++)
-        {
-            var w = WallColors[i];
-            SerializedProperty e = arr.GetArrayElementAtIndex(i);
-            e.FindPropertyRelative("optionId").stringValue = w.id;
-            e.FindPropertyRelative("part").enumValueIndex = (int)PartType.Wall;
-            e.FindPropertyRelative("displayName").stringValue = w.name;
-            e.FindPropertyRelative("useColor").boolValue = true;
-            ColorUtility.TryParseHtmlString(w.hex, out Color c);
-            e.FindPropertyRelative("color").colorValue = c;
-            e.FindPropertyRelative("extraCost").intValue = w.cost;
-            e.FindPropertyRelative("isDefault").boolValue = w.isDefault;
-        }
-        tso.ApplyModifiedProperties();
-
-        // m_walls를 쓰는 벽 메쉬 → Interactable 레이어 (클릭·강조용)
-        int layer = EnsureLayer(InteractableLayer);
-        int count = 0;
-        foreach (Renderer r in Object.FindObjectsByType<Renderer>())
-        {
-            if (System.Array.IndexOf(r.sharedMaterials, walls) < 0) continue;
-            if (layer >= 0)
-            {
-                Undo.RecordObject(r.gameObject, "COM Wallpaper Setup");
-                r.gameObject.layer = layer;
-            }
-            count++;
-        }
-
-        Selection.activeGameObject = go;
-        Debug.Log($"[COM] 벽지 세팅 완료. m_walls 쓰는 메쉬 {count}개. Play 후 숫자 1~4로 색 변경.");
+        // 10/12: 옵션 목록은 OptionCatalog에 있으므로 여기서는 클릭·색 변경 대상(OptionPart)만 만든다
+        EnsureColorPart("Option_Countertop", PartType.Countertop, "m_countertop", null);
+        EnsureColorPart("Option_Sofa", PartType.SofaFabric, "m_white_fabric", "sm_coach");
+        EnsureColorPart("Option_Rug", PartType.Rug, "m_carpet", "sm_carpet");
+        Debug.Log("[COM] 상판·소파·러그 대상 준비 완료. Console의 '제외한 것' 목록 확인!");
     }
 
-    // ------------------------------------------------------------
-    // 바닥 색상 4종 (EC0000 포함). 금액은 예시 값 → SRS A-7과 맞춰서 바꿀 것
-    private static readonly (string id, string name, string hex, int cost, bool isDefault)[] FloorColors =
-    {
-        ("floor_wood",   "원목 마루 (기본)", "#FFFFFF", 0,       true),
-        ("floor_kang",   "강마루",           "#E48120", 1500000, false),
-        ("floor_navy",   "네이비 마루",      "#1747BE", 3200000, false),
-        ("floor_red",    "레드 포인트",      "#EC0000", 1000000, false),
-    };
-
-    // 상판·소파·러그: Assets/Material에 만든 5색을 세 파트 모두 선택 가능 (가격은 파트별 SRS A-7 금액)
-    private static readonly (string id, string name, string hex)[] FurniturePalette =
-    {
-        ("darkstone", "다크 스톤", "#505B5C"),
-        ("warmgray",  "웜 그레이", "#B1B3B3"),
-        ("navy",      "네이비",    "#000055"),
-        ("beige",     "베이지",    "#D4B886"),
-        ("charcoal",  "차콜",      "#323232"),
-    };
-
-    private static (string id, string name, string hex, int cost, bool isDefault)[] MakeFurnitureColors(
-        string prefix, string defaultName, int cost)
-    {
-        var list = new System.Collections.Generic.List<(string, string, string, int, bool)>
-        {
-            ($"{prefix}_default", $"{defaultName} (기본)", "#FFFFFF", 0, true)
-        };
-        foreach (var c in FurniturePalette)
-            list.Add(($"{prefix}_{c.id}", c.name, c.hex, cost, false));
-        return list.ToArray();
-    }
-
-    private static readonly (string id, string name, string hex, int cost, bool isDefault)[] CounterColors =
-        MakeFurnitureColors("counter", "화이트 상판", 1800000);
-    private static readonly (string id, string name, string hex, int cost, bool isDefault)[] SofaColors =
-        MakeFurnitureColors("sofa", "화이트", 300000);
-    private static readonly (string id, string name, string hex, int cost, bool isDefault)[] RugColors =
-        MakeFurnitureColors("rug", "기본 러그", 250000);
-
-    [MenuItem("COM/8. 상판·소파·러그 옵션 추가")]
-    private static void AddFurnitureOptions()
-    {
-        OptionPanelUI panel = Object.FindAnyObjectByType<OptionPanelUI>(FindObjectsInactive.Include);
-        if (panel == null)
-        {
-            EditorUtility.DisplayDialog("COM", "OptionPanelUI가 씬에 없어. 먼저 5번으로 UI를 만들어 줘.", "확인");
-            return;
-        }
-
-        OptionPart counter = EnsureColorPart("Option_Countertop", PartType.Countertop, "m_countertop", null);
-        OptionPart sofa    = EnsureColorPart("Option_Sofa", PartType.SofaFabric, "m_white_fabric", "sm_coach");
-        OptionPart rug     = EnsureColorPart("Option_Rug", PartType.Rug, "m_carpet", "sm_carpet");
-        if (counter == null || sofa == null || rug == null) return;
-
-        Undo.RecordObject(panel, "COM Furniture Options");
-        var o = new SerializedObject(panel);
-        SerializedProperty entries = o.FindProperty("entries");
-        AddOrUpdateEntry(entries, "주방 상판", PartType.Countertop, counter, CounterColors);
-        AddOrUpdateEntry(entries, "소파", PartType.SofaFabric, sofa, SofaColors);
-        AddOrUpdateEntry(entries, "러그", PartType.Rug, rug, RugColors);
-        o.ApplyModifiedProperties();
-        EditorUtility.SetDirty(panel);
-        Debug.Log("[COM] 상판·소파·러그 옵션 추가 완료. Console의 '제외한 것' 목록 확인!");
-    }
-
-    private static void AddOrUpdateEntry(SerializedProperty entries, string label, PartType type, OptionPart target,
-                                         (string id, string name, string hex, int cost, bool isDefault)[] colors)
-    {
-        for (int i = 0; i < entries.arraySize; i++)
-        {
-            SerializedProperty e = entries.GetArrayElementAtIndex(i);
-            if (e.FindPropertyRelative("part").enumValueIndex == (int)type)
-            {
-                FillEntry(e, label, type, target, colors);
-                return;
-            }
-        }
-        entries.arraySize++;
-        FillEntry(entries.GetArrayElementAtIndex(entries.arraySize - 1), label, type, target, colors);
-    }
-
-    [MenuItem("COM/5. 옵션 UI 만들기 (메뉴·옵션 패널·구역 정보 창)")]
-    private static void BuildUI()
+    internal static void BuildUI()
     {
         // 1) 옵션 대상: 벽, 바닥
         // m_walls는 천장·아일랜드·몰딩도, m_floor는 의자·수납함도 같이 써서 이름으로 대상만 골라냄 (WBS 2.06)
@@ -435,78 +286,18 @@ public static class COMSetupTools
         z.FindProperty("featureText").objectReferenceValue = zFeat;
         z.ApplyModifiedProperties();
 
-        // 8) 옵션 패널 데이터 (벽지, 바닥재)
+        // 8) 옵션 패널 연결. 옵션 목록·가격은 OptionCatalog(부록 A-7), 선택 상태는 ConfigurationState에서 읽는다 (10/12)
         var o = new SerializedObject(optionPanel);
         o.FindProperty("tabBar").objectReferenceValue = tabBar;
         o.FindProperty("listRoot").objectReferenceValue = list;
-        o.FindProperty("hud").objectReferenceValue = hud;
         o.FindProperty("closeButton").objectReferenceValue = optClose;
-        SerializedProperty entries = o.FindProperty("entries");
-        entries.arraySize = 2;
-        FillEntry(entries.GetArrayElementAtIndex(0), "벽지", PartType.Wall, wall, WallColors);
-        FillEntry(entries.GetArrayElementAtIndex(1), "바닥재", PartType.Floor, floor, FloorColors);
+        o.FindProperty("config").objectReferenceValue = Object.FindAnyObjectByType<ConfigurationState>();
         o.ApplyModifiedProperties();
 
         Selection.activeGameObject = canvasGo;
         Debug.Log("[COM] UI 생성 완료: 좌측 상단 메뉴, 옵션 패널(벽지·바닥재), 기록 패널(자리만), 구역 정보 창");
     }
 
-    // 씬의 옵션 패널을 다시 만들지 않고 목록(색·이름·가격)만 코드 값으로 갱신
-    // → UI 위치·크기를 손으로 바꿔 둔 게 있어도 그대로 유지됨
-    [MenuItem("COM/6. 옵션 목록만 갱신 (UI 유지)")]
-    private static void RefreshOptionLists()
-    {
-        OptionPanelUI panel = Object.FindAnyObjectByType<OptionPanelUI>(FindObjectsInactive.Include);
-        if (panel == null)
-        {
-            EditorUtility.DisplayDialog("COM", "OptionPanelUI가 씬에 없어. 먼저 5번으로 UI를 만들어 줘.", "확인");
-            return;
-        }
-        Undo.RecordObject(panel, "COM Refresh Options");
-        var o = new SerializedObject(panel);
-        SerializedProperty entries = o.FindProperty("entries");
-        for (int i = 0; i < entries.arraySize; i++)
-        {
-            SerializedProperty e = entries.GetArrayElementAtIndex(i);
-            var type = (PartType)e.FindPropertyRelative("part").enumValueIndex;
-            var target = (OptionPart)e.FindPropertyRelative("target").objectReferenceValue;
-            string label = e.FindPropertyRelative("label").stringValue;
-            if (type == PartType.Wall) FillEntry(e, label, type, target, WallColors);
-            else if (type == PartType.Floor) FillEntry(e, label, type, target, FloorColors);
-            else if (type == PartType.Countertop) FillEntry(e, label, type, target, CounterColors);
-            else if (type == PartType.SofaFabric) FillEntry(e, label, type, target, SofaColors);
-            else if (type == PartType.Rug) FillEntry(e, label, type, target, RugColors);
-        }
-        o.ApplyModifiedProperties();
-        EditorUtility.SetDirty(panel);
-        Debug.Log("[COM] 옵션 목록 갱신 완료 (벽지·바닥재)");
-    }
-
-    // NFR-03 검사: 문·문틀 실제 높이(월드 기준 m)와 모델 스케일을 Console에 출력
-    [MenuItem("COM/7. 문 높이·스케일 재기 (NFR-03)")]
-    private static void MeasureDoors()
-    {
-        GameObject apt = GameObject.Find("open_concept_apartment_unity");
-        if (apt != null)
-        {
-            Debug.Log($"[COM] 아파트 Transform Scale = {apt.transform.lossyScale}");
-            Object src = PrefabUtility.GetCorrespondingObjectFromOriginalSource(apt);
-            string path = src != null ? AssetDatabase.GetAssetPath(src) : "";
-            if (AssetImporter.GetAtPath(path) is ModelImporter mi)
-                Debug.Log($"[COM] FBX Scale Factor = {mi.globalScale}, Convert Units(useFileScale) = {mi.useFileScale}, 파일 단위 배율 = {mi.fileScale}");
-        }
-
-        foreach (Renderer r in Object.FindObjectsByType<Renderer>())
-        {
-            string n = r.name.ToLower();
-            if (!n.StartsWith("sm_door") && !n.StartsWith("sm_closet_door")) continue;
-            Vector3 s = r.bounds.size;   // 월드 기준 크기(m)
-            Debug.Log($"[COM] {r.name}: 높이 {s.y:0.00}m, 폭 {Mathf.Max(s.x, s.z):0.00}m, 두께 {Mathf.Min(s.x, s.z):0.00}m (Scale {r.transform.lossyScale})", r);
-        }
-
-        Camera cam = Camera.main;
-        if (cam != null) Debug.Log($"[COM] 비교용: 카메라(눈) 높이 y = {cam.transform.position.y:0.00}m");
-    }
 
     private static OptionPart EnsureColorPart(string objName, PartType type, string matName, string namePrefix)
     {
@@ -559,29 +350,6 @@ public static class COMSetupTools
         foreach (string p in prefixes.Split('|'))
             if (name.StartsWith(p)) return true;
         return false;
-    }
-
-    private static void FillEntry(SerializedProperty e, string label, PartType type, OptionPart target,
-                                  (string id, string name, string hex, int cost, bool isDefault)[] colors)
-    {
-        e.FindPropertyRelative("label").stringValue = label;
-        e.FindPropertyRelative("part").enumValueIndex = (int)type;
-        e.FindPropertyRelative("target").objectReferenceValue = target;
-        SerializedProperty opts = e.FindPropertyRelative("options");
-        opts.arraySize = colors.Length;
-        for (int i = 0; i < colors.Length; i++)
-        {
-            var c = colors[i];
-            SerializedProperty it = opts.GetArrayElementAtIndex(i);
-            it.FindPropertyRelative("optionId").stringValue = c.id;
-            it.FindPropertyRelative("part").enumValueIndex = (int)type;
-            it.FindPropertyRelative("displayName").stringValue = c.name;
-            it.FindPropertyRelative("useColor").boolValue = true;
-            ColorUtility.TryParseHtmlString(c.hex, out Color col);
-            it.FindPropertyRelative("color").colorValue = col;
-            it.FindPropertyRelative("extraCost").intValue = c.cost;
-            it.FindPropertyRelative("isDefault").boolValue = c.isDefault;
-        }
     }
 
     private static void SetRef(Object target, string field, Object value)

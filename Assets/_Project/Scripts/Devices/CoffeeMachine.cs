@@ -23,9 +23,26 @@ public class CoffeeMachine : MonoBehaviour
     bool isBrewing;
     Coroutine routine;
 
+    [Tooltip("추출구 오브젝트. 비우면 자식 'Spout'을 찾는다. 있으면 Play 시작 때 cupHolder를 추출구 바로 아래로 맞춘다")]
+    [SerializeField] Transform spout;
+    [Tooltip("추출구 끝에서 안쪽으로 이만큼 들어온 곳 아래에 컵 가운데를 둔다 (m)")]
+    [SerializeField] float spoutTipInset = 0.025f;
+
     void Awake()
     {
         if (steam != null) steam.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        AlignHolderToSpout();
+    }
+
+    // 머신 몸체·추출구를 옮겨도 컵 받는 자리가 추출구 아래를 따라가게 한다 (높이는 cupHolder 그대로)
+    void AlignHolderToSpout()
+    {
+        if (spout == null) spout = transform.Find("Spout");
+        if (spout == null || cupHolder == null) return;
+        Vector3 fwd = spout.forward; fwd.y = 0f;
+        float half = spout.lossyScale.z * 0.5f;
+        Vector3 under = spout.position + (fwd.sqrMagnitude > 1e-6f ? fwd.normalized : Vector3.zero) * Mathf.Max(0f, half - spoutTipInset);
+        cupHolder.position = new Vector3(under.x, cupHolder.position.y, under.z);
     }
 
     void OnEnable() => HomeEvents.OnScenarioReset += ResetMachine;

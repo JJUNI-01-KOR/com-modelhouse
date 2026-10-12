@@ -48,8 +48,16 @@ public class RobotArm : MonoBehaviour, IClickable
     [SerializeField] Transform ikTarget;
     [Tooltip("홈 자세 관절 각도(도), Base부터 순서대로. 비우면 시작 자세가 홈")]
     [SerializeField] float[] homeAnglesDeg = new float[0];
+    [Tooltip("홈 각도가 비어 있으면 어깨 위로 팔을 접은 준비 자세를 자동으로 홈으로 쓴다")]
+    [SerializeField] bool autoReadyHome = true;
+    [Tooltip("준비 자세 손끝 높이: 어깨에서 위로 (m)")]
+    [SerializeField] float readyHeight = 0.25f;
+    [Tooltip("준비 자세 손끝 거리: 어깨에서 앞으로 (m)")]
+    [SerializeField] float readyForward = 0.15f;
 
     [Header("IK (FR-15)")]
+    [Tooltip("팔꿈치·손목 관절이 식탁 면(로봇을 놓은 높이)보다 이만큼 위에 있는 자세만 고른다 (m)")]
+    [SerializeField] float tableClearance = 0.03f;
     [SerializeField] float reachTolerance = 0.02f;
     [SerializeField] float angleTolerance = 10f;
     [SerializeField] float ikTimeout = 5f;
@@ -63,7 +71,7 @@ public class RobotArm : MonoBehaviour, IClickable
 
     [Header("충돌")]
     [Tooltip("로봇팔이 부딪히지 않고 지나갈 레이어 (식탁·커피 머신이 있는 레이어)")]
-    [SerializeField] LayerMask passThroughLayers = 1;
+    [SerializeField] LayerMask passThroughLayers = ~0;   // 기본: 모든 레이어 통과 (식탁·가구와 부딪히지 않음, 클릭 판정에는 영향 없음)
 
     [Header("클릭 강조 (FR-13 1번)")]
     [Tooltip("커서가 올라가면 색을 이만큼 밝게 (OptionPart와 같은 방식)")]
@@ -162,6 +170,20 @@ public class RobotArm : MonoBehaviour, IClickable
         homeDeg = new float[n];
         bool hasHome = homeAnglesDeg != null && homeAnglesDeg.Length == n;
         for (int i = 0; i < n; i++) homeDeg[i] = hasHome ? homeAnglesDeg[i] : restRad[i] * Mathf.Rad2Deg;
+
+        // 홈 각도를 안 정했으면: 시작 자세(UR3는 팔을 옆으로 쭉 뻗은 자세)는 식탁·머신에 걸리므로
+        // 어깨 위로 팔을 접어 올린 "준비 자세"를 IK로 구해 홈으로 쓴다
+        if (!hasHome && autoReadyHome)
+        {
+            Vector3 shoulder = n > 1 ? JointPivotNow(1) : BasePosition;
+            Vector3 fwd = tip.position - BasePosition; fwd.y = 0f;
+            fwd = fwd.sqrMagnitude > 1e-6f ? fwd.normalized : transform.forward;
+            Vector3 readyPos = shoulder + Vector3.up * readyHeight + fwd * readyForward;
+            if (PlanIK(readyPos, Quaternion.LookRotation(fwd, Vector3.up), out float[] readyDeg))
+                homeDeg = readyDeg;
+            else
+                Debug.LogWarning("[RobotArm] 준비 자세를 못 구해 시작 자세를 홈으로 씀 (readyHeight·readyForward 조정)", this);
+        }
         SnapToHome();
         ready = true;
     }
@@ -450,19 +472,26 @@ public class RobotArm : MonoBehaviour, IClickable
 
         goalDeg = null;
         float[] q = (float[])seed.Clone();
-        if (SolveModel(seed, q, pos, rot)) { goalDeg = ToGoalDeg(seed, q); return true; }
+        if (SolveModel(seed, q, pos, rot) && AboveTable(q)) { goalDeg = ToGoalDeg(seed, q); return true; }
 
+        // 해가 없거나 팔꿈치·손목이 식탁 아래로 내려가는 해(팔꿈치 아래 자세)면 시작점을 바꿔 다시 푼다.
+        // 식탁 위 해를 우선 고르고, 끝내 없으면 식탁 아래 해라도 쓴다 (시연이 멈추지 않게).
         var rng = new System.Random(7);
-        float bestDelta = float.MaxValue;
-        for (int attempt = 0; attempt < 10; attempt++)
+        float bestClear = float.MaxValue, bestAny = float.MaxValue;
+        float[] clearGoal = null, anyGoal = null;
+        for (int attempt = 0; attempt < 40; attempt++)
         {
             for (int i = 0; i < n; i++) q[i] = seed[i] + (float)(rng.NextDouble() * 2 - 1) * Mathf.PI * 0.5f;
             if (!SolveModel(seed, q, pos, rot)) continue;
             float[] g = ToGoalDeg(seed, q);
             float delta = 0f;
             for (int i = 0; i < n; i++) delta = Mathf.Max(delta, Mathf.Abs(g[i] - seed[i] * Mathf.Rad2Deg));
-            if (delta < bestDelta) { bestDelta = delta; goalDeg = g; }
+            if (AboveTable(q)) { if (delta < bestClear) { bestClear = delta; clearGoal = g; } }
+            else if (delta < bestAny) { bestAny = delta; anyGoal = g; }
         }
+        goalDeg = clearGoal ?? anyGoal;
+        if (clearGoal == null && anyGoal != null)
+            Debug.LogWarning($"[RobotArm] 식탁 위로만 닿는 자세를 못 찾아 식탁 아래로 지나가는 자세를 씀 (목표 {pos}, 로봇에서 수평 {Vector3.Distance(new Vector3(pos.x, 0, pos.z), new Vector3(BasePosition.x, 0, BasePosition.z)):F2}m) → 컵·머신을 로봇 쪽으로 옮기기", this);
         return goalDeg != null;
     }
 
@@ -502,6 +531,23 @@ public class RobotArm : MonoBehaviour, IClickable
             }
         }
         return false;
+    }
+
+    // 팔꿈치가 식탁 아래로 내려가는 "팔꿈치 아래" 자세를 거른다.
+    // - 어깨·팔꿈치(1, 2번 관절): 식탁 면 + tableClearance 이상
+    // - 첫 손목(3번): 식탁 면 이상
+    // - 나머지 손목(4, 5번)은 컵을 옆에서 잡을 때 손끝 높이(식탁 위 5cm)까지 내려와야 하므로 검사하지 않는다
+    bool AboveTable(float[] q)
+    {
+        ForwardKinematics(q, out _, out _);
+        float table = transform.position.y;
+        int last = Mathf.Min(3, joints.Length - 1);
+        for (int i = 1; i <= last; i++)
+        {
+            float floor = table + (i < 3 ? tableClearance : 0f);
+            if (fkPivot[i].y < floor) return false;
+        }
+        return true;
     }
 
     // 같은 자세를 뜻하는 각도 중 지금 각도에서 가까운 쪽으로 (한 바퀴 돌지 않게)

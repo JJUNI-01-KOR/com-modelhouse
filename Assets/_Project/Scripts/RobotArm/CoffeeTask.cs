@@ -35,6 +35,8 @@ public class CoffeeTask : MonoBehaviour
     [SerializeField] float liftHeight = 0.08f;
     [Range(0f, 1f)]
     [SerializeField] float gripAmount = 0.6f;
+    [Tooltip("커피 완료 후 컵을 빈 상태로 되돌리기까지의 시간 (SRS 6장: 3초)")]
+    [SerializeField] float emptyDelay = 3f;
 
     [Header("테스트")]
     [Tooltip("Play 중 C 키로 로봇팔 클릭을 흉내 낸다. 시연 빌드에서는 끈다")]
@@ -72,7 +74,8 @@ public class CoffeeTask : MonoBehaviour
 #if ENABLE_INPUT_SYSTEM
     void Update()
     {
-        if (testKey && Keyboard.current != null && Keyboard.current.cKey.wasPressedThisFrame)
+        // C 키 테스트는 에디터에서만 (시연 빌드에서는 자동으로 꺼짐)
+        if (testKey && Application.isEditor && Keyboard.current != null && Keyboard.current.cKey.wasPressedThisFrame)
             HomeEvents.RaiseArmClicked(arm);
     }
 #endif
@@ -154,6 +157,10 @@ public class CoffeeTask : MonoBehaviour
         yield return arm.GoHomeRoutine();
         arm.SetState(ArmState.Idle);
         HomeEvents.Log(logTarget, "커피 완료");
+
+        // 7. 커피 완료 3초 뒤 컵을 빈 상태로 되돌린다 (FR-13 처리 6, TC-16). 그동안 클릭은 무시
+        yield return new WaitForSeconds(emptyDelay);
+        machine.SetFilled(cup, false);
         isRunning = false;
         routine = null;
     }

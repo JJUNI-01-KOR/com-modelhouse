@@ -14,7 +14,7 @@ GameObject:
   - component: {fileID: 6606245755069704776}
   - component: {fileID: 5424061230804413783}
   - component: {fileID: 4420806500876529438}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: Wrist1
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -215,7 +215,7 @@ GameObject:
   - component: {fileID: 1269879762100248875}
   - component: {fileID: 6976486982370049845}
   - component: {fileID: 6996555887770111923}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: UR3
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -231,7 +231,7 @@ Transform:
   m_GameObject: {fileID: 4630463553038000140}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 17.81754, y: 0.76199996, z: -7.11111}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -439,7 +439,7 @@ MonoBehaviour:
   jointLimitDeg: 270
   passThroughLayers:
     serializedVersion: 2
-    m_Bits: 1
+    m_Bits: 4294967295
 --- !u!1 &5733574409206982920
 GameObject:
   m_ObjectHideFlags: 0
@@ -454,7 +454,7 @@ GameObject:
   - component: {fileID: 4256180814697025283}
   - component: {fileID: 7220703997447304336}
   - component: {fileID: 6941680048540297063}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: Shoulder
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -650,7 +650,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 6796788913964794180}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: Tip
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -686,7 +686,7 @@ GameObject:
   - component: {fileID: 5287813717084448482}
   - component: {fileID: 1829227979352833736}
   - component: {fileID: 794987012266822988}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: Base
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -886,7 +886,7 @@ GameObject:
   - component: {fileID: 3535951148291963707}
   - component: {fileID: 1574243757698010173}
   - component: {fileID: 9152162813406197038}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: Wrist2
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1080,7 +1080,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 6584817732730203065}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: RobotArm
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1096,7 +1096,7 @@ Transform:
   m_GameObject: {fileID: 7801443370276855240}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -17.81754, y: -0, z: 7.11111}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -1118,7 +1118,7 @@ GameObject:
   - component: {fileID: 3054709760063678440}
   - component: {fileID: 9049882522326181275}
   - component: {fileID: 2647268576737731366}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: Cube
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1134,7 +1134,7 @@ Transform:
   m_GameObject: {fileID: 7856111511642644844}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 18.30254, y: 0.778, z: -7.2811103}
+  m_LocalPosition: {x: 0.485, y: 0.016, z: -0.17}
   m_LocalScale: {x: 0.03, y: 0.03, z: 0.1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1259,7 +1259,7 @@ GameObject:
   - component: {fileID: 3759191070479251086}
   - component: {fileID: 5869798407711364698}
   - component: {fileID: 877401394310031590}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: Elbow
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1455,7 +1455,7 @@ GameObject:
   - component: {fileID: 5678264169194427410}
   - component: {fileID: 1297712975625865607}
   - component: {fileID: 4867026077644956425}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: Wrist3
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -2089,15 +2089,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -4216859302048453862, guid: 3fba682e7b5a0444eb5e51e6fc772147, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 17.81754
-      objectReference: {fileID: 0}
-    - target: {fileID: -4216859302048453862, guid: 3fba682e7b5a0444eb5e51e6fc772147, type: 3}
-      propertyPath: m_LocalPosition.y
       value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -4216859302048453862, guid: 3fba682e7b5a0444eb5e51e6fc772147, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: -0.762
+      objectReference: {fileID: 0}
+    - target: {fileID: -4216859302048453862, guid: 3fba682e7b5a0444eb5e51e6fc772147, type: 3}
       propertyPath: m_LocalPosition.z
-      value: -7.11111
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -4216859302048453862, guid: 3fba682e7b5a0444eb5e51e6fc772147, type: 3}
       propertyPath: m_LocalRotation.w
@@ -2130,6 +2130,10 @@ PrefabInstance:
     - target: {fileID: -927199367670048503, guid: 3fba682e7b5a0444eb5e51e6fc772147, type: 3}
       propertyPath: m_Name
       value: Table
+      objectReference: {fileID: 0}
+    - target: {fileID: -927199367670048503, guid: 3fba682e7b5a0444eb5e51e6fc772147, type: 3}
+      propertyPath: m_IsActive
+      value: 0
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
