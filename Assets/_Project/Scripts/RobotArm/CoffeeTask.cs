@@ -87,6 +87,13 @@ public class CoffeeTask : MonoBehaviour
     [SerializeField] float gripAmount = 0.6f;
     [Tooltip("컵 지름을 재서 손가락이 컵 겉면에서 멈추게 닫는다 (컵을 뚫고 들어가지 않게)")]
     [SerializeField] bool autoGrip = true;
+    [Tooltip("컵이 그리퍼가 벌어지는 폭보다 크면 Play 시작 때 컵을 그리퍼에 맞는 크기로 줄인다 (바닥 가운데 기준, 위치 그대로)")]
+    [SerializeField] bool fitCupsToGripper = true;
+    [Tooltip("줄일 때 컵 지름 = 그리퍼 최대 벌림 × 이 값 (여유를 두고 잡도록)")]
+    [Range(0.5f, 0.95f)]
+    [SerializeField] float cupFitRatio = 0.8f;
+    [Tooltip("컵 몸통 지름 최대값 (m). 그리퍼 폭을 못 재거나 잰 값이 이상해도 이 크기 이하로 맞춘다 (Robotiq 2F-85 최대 벌림 8.5cm 기준 6cm)")]
+    [SerializeField] float maxCupDiameter = 0.06f;
 
     [Header("키 조작 (식탁 안내판과 같음)")]
     [Tooltip("C = 동작(로봇팔 클릭), X = 일시정지/이어서 진행, Z = 정지. 시연 빌드에서도 동작")]
@@ -121,6 +128,7 @@ public class CoffeeTask : MonoBehaviour
 
     void Start()
     {
+        if (fitCupsToGripper && arm != null) StartCoroutine(FitCupsToGripper());
         if (UseRack)
         {
             foreach (Transform c in rackCups)
@@ -439,6 +447,26 @@ public class CoffeeTask : MonoBehaviour
         current = null;
         isRunning = false;
         routine = null;
+    }
+
+    // 컵이 그리퍼보다 크면 모든 컵을 같은 비율로 줄인다 (잡는 높이도 같이). 손가락 위치가 정해진 뒤에 재야 해서 팔 준비 후 실행
+    IEnumerator FitCupsToGripper()
+    {
+        while (arm != null && !arm.IsReady) yield return null;
+        yield return new WaitForFixedUpdate();
+        float open = arm.GripperOpenWidth();
+        var cups = new List<Transform>();
+        if (UseRack) { foreach (Transform t in rackCups) if (t != null) cups.Add(t); }
+        else if (cup != null) cups.Add(cup);
+        float widest = 0f;
+        foreach (Transform t in cups) widest = Mathf.Max(widest, CupDiameter(t));
+        float target = open > 0f ? Mathf.Min(open * cupFitRatio, maxCupDiameter) : maxCupDiameter;
+        if (widest <= 0f) { Debug.LogWarning("[CoffeeTask] 컵 지름을 못 잼 (MeshFilter 없음) → 컵 크기 그대로", this); yield break; }
+        if (widest <= target) { Debug.Log($"[CoffeeTask] 컵 지름 {widest * 100f:F1}cm, 그리퍼 최대 벌림 {(open > 0f ? (open * 100f).ToString("F1") + "cm" : "모름")} → 크기 그대로", this); yield break; }
+        float k = target / widest;
+        foreach (Transform t in cups) t.localScale *= k;      // 피벗이 컵 바닥 가운데라 위치는 그대로
+        graspHeight *= k;
+        Debug.Log($"[CoffeeTask] 컵 지름 {widest * 100f:F1}cm → {target * 100f:F1}cm로 줄임 (그리퍼 최대 벌림 {(open > 0f ? (open * 100f).ToString("F1") + "cm" : "모름")}, 비율 {k:F2})", this);
     }
 
     // 컵을 잡을 때 그리퍼를 닫는 정도: 컵 몸통 지름에 손가락 안쪽이 닿는 만큼 (손잡이·커피는 빼고 잰다)

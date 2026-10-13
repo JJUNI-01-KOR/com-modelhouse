@@ -427,16 +427,26 @@ MonoBehaviour:
   displayName: "\uCEE4\uD53C \uB85C\uBD07\uD314"
   tip: {fileID: 6796788913964794180}
   gripper: {fileID: 0}
-  ikTarget: {fileID: 0}
   homeAnglesDeg: []
-  autoReadyHome: 1
-  readyHeight: 0.25
-  readyForward: 0.15
+  keepHeldUpright: 1
   tableClearance: 0.03
+  elbowFoldLimit: 150
+  lockConfiguration: 1
+  avoidCollisions: 1
+  obstacleRoots: []
+  collisionMargin: 0.01
+  selfShrink: 0.015
+  startStraightUp: 1
+  baseFirst: 1
+  baseFirstMinDeg: 15
+  travelHeight: 0.24
+  carryHeight: 0.32
+  carryRadius: 0.22
+  lineStep: 0.01
+  reachRadius: 0.62
+  warnCollisions: 1
   reachTolerance: 0.02
   angleTolerance: 10
-  ikTimeout: 5
-  maxReach: 0.6
   moveSpeed: 120
   orientationWeight: 0.2
   damping: 0.02
@@ -444,6 +454,7 @@ MonoBehaviour:
   passThroughLayers:
     serializedVersion: 2
     m_Bits: 4294967295
+  ignoreSunlight: 1
   highlightBoost: 1.4
 --- !u!1 &5733574409206982920
 GameObject:
@@ -1811,7 +1822,7 @@ ArticulationBody:
   m_Enabled: 1
   serializedVersion: 6
   m_Mass: 1
-  m_ParentAnchorPosition: {x: 0, y: 0.045000017, z: -0.046999995}
+  m_ParentAnchorPosition: {x: 0, y: 0.044999957, z: -0.04699998}
   m_ParentAnchorRotation: {x: -0.5, y: 0.5, z: 0.5, w: 0.5}
   m_AnchorPosition: {x: 0, y: 0, z: 0}
   m_AnchorRotation: {x: 0, y: 0, z: 0.70710677, w: 0.70710677}
@@ -1934,7 +1945,7 @@ ArticulationBody:
   m_Enabled: 1
   serializedVersion: 6
   m_Mass: 1
-  m_ParentAnchorPosition: {x: 0.52300006, y: 11.505001, z: 1.3914026}
+  m_ParentAnchorPosition: {x: 0.522995, y: 11.505001, z: 1.3914086}
   m_ParentAnchorRotation: {x: 0, y: 0, z: 0.7071068, w: 0.7071068}
   m_AnchorPosition: {x: 0, y: 0, z: 0}
   m_AnchorRotation: {x: 0, y: 0, z: 0.70710677, w: 0.70710677}
@@ -2039,7 +2050,7 @@ ArticulationBody:
   m_Enabled: 1
   serializedVersion: 6
   m_Mass: 1
-  m_ParentAnchorPosition: {x: -0.52300006, y: 11.505002, z: -1.3913959}
+  m_ParentAnchorPosition: {x: -0.522995, y: 11.505002, z: -1.39139}
   m_ParentAnchorRotation: {x: 0, y: 0, z: 0.7071068, w: 0.7071068}
   m_AnchorPosition: {x: 0, y: 0, z: 0}
   m_AnchorRotation: {x: 0, y: 0, z: 0.70710677, w: 0.70710677}

@@ -630,24 +630,33 @@ public class RobotArm : MonoBehaviour, IClickable
     // 손가락은 열림 위치 ↔ closedZ 사이를 직선으로 움직이므로 열림·닫힘 간격 사이를 비례로 나눈다
     public float GripForWidth(float width)
     {
-        if (gripper == null || gripper.fingerA == null || gripper.fingerB == null) return -1f;
+        if (!GripGaps(out float gapOpen, out float gapClosed)) return -1f;
+        if (width >= gapOpen) Debug.LogWarning($"[RobotArm] 컵 지름 {width * 100f:F1}cm가 그리퍼 최대 벌림 {gapOpen * 100f:F1}cm보다 큼", this);
+        return Mathf.Clamp01((gapOpen - width) / (gapOpen - gapClosed));
+    }
+
+    // 그리퍼를 다 벌렸을 때 손가락 안쪽 간격 (m). 알 수 없으면 -1
+    public float GripperOpenWidth() => GripGaps(out float gapOpen, out _) ? gapOpen : -1f;
+
+    bool GripGaps(out float gapOpen, out float gapClosed)
+    {
+        gapOpen = gapClosed = 0f;
+        if (gripper == null || gripper.fingerA == null || gripper.fingerB == null) return false;
         var fa = gripper.fingerA.GetComponent<PincherFingerController>();
         var fb = gripper.fingerB.GetComponent<PincherFingerController>();
-        if (fa == null || fb == null) return -1f;
+        if (fa == null || fb == null) return false;
         Transform ta = fa.transform, tb = fb.transform;
         Vector3 aOpen = ta.parent.TransformPoint(fa.GetOpenPosition());
         Vector3 bOpen = tb.parent.TransformPoint(fb.GetOpenPosition());
         Vector3 aClosed = ta.parent.TransformPoint(new Vector3(fa.GetOpenPosition().x, fa.GetOpenPosition().y, fa.closedZ));
         Vector3 bClosed = tb.parent.TransformPoint(new Vector3(fb.GetOpenPosition().x, fb.GetOpenPosition().y, fb.closedZ));
         Vector3 dir = bOpen - aOpen;
-        if (dir.sqrMagnitude < 1e-8f) return -1f;
+        if (dir.sqrMagnitude < 1e-8f) return false;
         dir.Normalize();
         float thick = HalfThickness(ta, dir) + HalfThickness(tb, dir);
-        float gapOpen = Vector3.Dot(bOpen - aOpen, dir) - thick;
-        float gapClosed = Vector3.Dot(bClosed - aClosed, dir) - thick;
-        if (gapOpen - gapClosed < 1e-5f) return -1f;
-        if (width >= gapOpen) Debug.LogWarning($"[RobotArm] 컵 지름 {width * 100f:F1}cm가 그리퍼 최대 벌림 {gapOpen * 100f:F1}cm보다 큼", this);
-        return Mathf.Clamp01((gapOpen - width) / (gapOpen - gapClosed));
+        gapOpen = Vector3.Dot(bOpen - aOpen, dir) - thick;
+        gapClosed = Vector3.Dot(bClosed - aClosed, dir) - thick;
+        return gapOpen > 0.005f && gapOpen - gapClosed > 1e-5f;
     }
 
     // 손가락 콜라이더(없으면 렌더러) 두께의 절반을 dir 방향으로 잰 값
