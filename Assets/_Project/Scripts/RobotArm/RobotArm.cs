@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -129,6 +129,7 @@ public class RobotArm : MonoBehaviour, IClickable
     readonly List<Collider> disabledColliders = new List<Collider>();
 
     public bool IsReady => ready;
+    public float ReachRadius => reachRadius;   // 팔이 닿는 수평 거리 (TC-18 시험용)
     public bool IsMoving { get; private set; }
     public bool LastMoveSucceeded { get; private set; }
     public bool IsHolding => heldObject != null;

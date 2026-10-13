@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 #if ENABLE_INPUT_SYSTEM
@@ -190,6 +190,34 @@ public class CoffeeTask : MonoBehaviour
             }
         }
         return null;
+    }
+
+    // 다음에 꺼낼 보관대 컵 (번호를 넘기지 않고 보기만)
+    Transform PeekNextCup()
+    {
+        if (!UseRack) return cup != null && inRack.Contains(cup) ? cup : null;
+        for (int k = 0; k < rackCups.Length; k++)
+        {
+            Transform c = rackCups[(nextRack + k) % rackCups.Length];
+            if (c != null && c.gameObject.activeInHierarchy && inRack.Contains(c)) return c;
+        }
+        return null;
+    }
+
+    // TC-18 시험: 다음 컵을 팔이 닿는 범위(reachRadius)보다 8cm 바깥으로 옮기고 커피를 시작한다.
+    // 기대: "로봇팔 상태 변경: 작업 실패" → 컵은 보관대 제자리로 돌아가고 팔은 홈 → 대기.
+    // Play 중 CoffeeTask Inspector 오른쪽 위 ⋮ → 이 메뉴
+    [ContextMenu("테스트: 팔이 안 닿는 컵 (TC-18)")]
+    void TestUnreachable()
+    {
+        if (!Application.isPlaying || !CanStart()) { Debug.LogWarning("[CoffeeTask] Play 중, 커피 작업이 없을 때만 시험할 수 있어요", this); return; }
+        Transform c = PeekNextCup();
+        if (c == null) { Debug.LogWarning("[CoffeeTask] 시험할 컵이 없어요", this); return; }
+        Vector3 b = arm.BasePosition;
+        Vector3 p = new Vector3(b.x, c.position.y, b.z) + Direction(c.position) * (arm.ReachRadius + 0.08f);
+        c.position = p;
+        HomeEvents.Log(logTarget, $"시험(TC-18): {c.name}을 밑동에서 {Flat(p):F2}m로 옮김 (팔 닿는 범위 {arm.ReachRadius:F2}m)");
+        Run();
     }
 
     public bool HasCup() => UseRack ? System.Array.Exists(rackCups, c => c != null && c.gameObject.activeInHierarchy)

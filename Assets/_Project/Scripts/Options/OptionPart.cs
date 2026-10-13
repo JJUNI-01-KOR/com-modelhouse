@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -105,6 +105,10 @@ public class OptionPart : MonoBehaviour, IClickable
             byRenderer.TryAdd(s.renderer, this);
         }
 
+        // 처음 모습(에셋 원본 재질)을 기억해 둔다 → 재질 옵션을 쓴 뒤 기본(색상형)으로 돌아올 때 사용
+        if (originalMaterial == null && slots.Count > 0)
+            originalMaterial = sourceMaterial != null ? sourceMaterial : slots[0].renderer.sharedMaterials[slots[0].index];
+
         if (slots.Count == 0)
             Debug.LogWarning($"[OptionPart] {name}: 바꿀 대상을 못 찾음 (sourceMaterial / renderers / modelSlot 확인)", this);
     }
@@ -164,20 +168,23 @@ public class OptionPart : MonoBehaviour, IClickable
     // 에셋 원본 재질을 직접 고치면 에디터에서도 색이 바뀐 채로 남으므로,
     // Play 중에만 쓰는 복사본을 만들어 그 색을 바꾼다. Play를 끄면 복사본은 사라짐.
     private Material runtimeMaterial;
+    private Material originalMaterial;   // 처음 모습 (CollectSlots에서 기억)
     private Color originalColor = Color.white;
 
     private void ApplyColor(OptionItem item)
     {
         if (runtimeMaterial == null)
         {
-            Material src = sourceMaterial;
+            // 지금 칸에 들어 있는 재질이 아니라 처음 재질을 복사 (재질 옵션을 쓴 뒤여도 원래 모습으로)
+            Material src = originalMaterial;
             if (src == null && slots.Count > 0) src = slots[0].renderer.sharedMaterials[slots[0].index];
             if (src == null) { Debug.LogWarning($"[OptionPart] {name}: 색을 바꿀 원본 재질이 없음", this); return; }
 
             runtimeMaterial = new Material(src) { name = src.name + " (Runtime)" };
             originalColor = GetColor(src);
-            SwapMaterial(runtimeMaterial);
         }
+        // 재질 옵션(예: 네이비 소파)이 칸을 차지하고 있을 수 있으므로 항상 다시 끼운다
+        SwapMaterial(runtimeMaterial);
 
         Color c = item.isDefault ? originalColor : item.color;
         if (runtimeMaterial.HasProperty(BaseColorId)) runtimeMaterial.SetColor(BaseColorId, c);

@@ -106,9 +106,9 @@ MonoBehaviour:
   - optionId: counter_darkstone
     part: 2
     displayName: "\uB2E4\uD06C \uC2A4\uD1A4"
-    useColor: 1
+    useColor: 0
     color: {r: 0.180392, g: 0.180392, b: 0.2, a: 1}
-    material: {fileID: 0}
+    material: {fileID: 2100000, guid: c28ed44520d36b74d911b4ad2b220201, type: 2}
     prefab: {fileID: 0}
     preview: {fileID: 0}
     extraCost: 1800000
@@ -126,9 +126,9 @@ MonoBehaviour:
   - optionId: sofa_warmgray
     part: 3
     displayName: "\uC6DC \uADF8\uB808\uC774"
-    useColor: 1
+    useColor: 0
     color: {r: 0.619608, g: 0.588235, b: 0.560784, a: 1}
-    material: {fileID: 0}
+    material: {fileID: 2100000, guid: d189769647f756844a195fc3b84c4f49, type: 2}
     prefab: {fileID: 0}
     preview: {fileID: 0}
     extraCost: 300000
@@ -136,9 +136,9 @@ MonoBehaviour:
   - optionId: sofa_navy
     part: 3
     displayName: "\uB124\uC774\uBE44"
-    useColor: 1
+    useColor: 0
     color: {r: 0.160784, g: 0.2, b: 0.309804, a: 1}
-    material: {fileID: 0}
+    material: {fileID: 2100000, guid: 95829774aeceb02438167ee434aad25d, type: 2}
     prefab: {fileID: 0}
     preview: {fileID: 0}
     extraCost: 300000
@@ -156,9 +156,9 @@ MonoBehaviour:
   - optionId: rug_beige
     part: 4
     displayName: "\uBCA0\uC774\uC9C0"
-    useColor: 1
+    useColor: 0
     color: {r: 0.85098, g: 0.780392, b: 0.65098, a: 1}
-    material: {fileID: 0}
+    material: {fileID: 2100000, guid: 427c06d311371c1418197c1e18c68632, type: 2}
     prefab: {fileID: 0}
     preview: {fileID: 0}
     extraCost: 250000
@@ -166,9 +166,9 @@ MonoBehaviour:
   - optionId: rug_charcoal
     part: 4
     displayName: "\uCC28\uCF5C"
-    useColor: 1
+    useColor: 0
     color: {r: 0.219608, g: 0.227451, b: 0.239216, a: 1}
-    material: {fileID: 0}
+    material: {fileID: 2100000, guid: 6c1645ec17367e9429b97150d8073210, type: 2}
     prefab: {fileID: 0}
     preview: {fileID: 0}
     extraCost: 250000
