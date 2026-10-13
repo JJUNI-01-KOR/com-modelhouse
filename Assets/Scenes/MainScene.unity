@@ -4019,8 +4019,8 @@ MonoBehaviour:
   part: 5
   sourceMaterial: {fileID: 2100000, guid: 68e696d22200245479fd30a70162b685, type: 2}
   renderers:
-  - {fileID: 3205464887715641409}
   - {fileID: 2444107789254905170}
+  - {fileID: 3205464887715641409}
   - {fileID: 6728857725304437688}
   - {fileID: 4830732329378860232}
   namePrefixes: 
