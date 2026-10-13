@@ -1,11 +1,11 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 
 // 메뉴 Tools → COM → 옵션 카탈로그 만들기 (부록 A-7, SRS v2.1)
 // - Assets/_Project/Data/OptionCatalog.asset 을 아래 표 순서·내용으로 다시 만든다.
-// - SRS v2.1: 모든 옵션은 색상형 (useColor + color). 모델·재질 교체 없음.
-//   기본 옵션은 useColor만 켜 두면 OptionPart가 에셋 원본 색으로 되돌린다.
+// - 기본은 색상형 (useColor + color). 기본 옵션은 useColor만 켜 두면 OptionPart가 에셋 원본 색으로 되돌린다.
+// - 10/13: 상판·소파·러그 옵션 5개는 재질형 (Materials/Interior의 재질로 교체, useColor 끔)
 // - 표에 없는 옵션 ID는 지운다. 이미 넣어 둔 미리보기(preview)는 같은 ID면 그대로 둔다.
 // - 그림 액자·화분 색 2종은 A-7에 "구현 시 확정"이라 제안 값이다. 확정되면 여기와 SRS A-7을 같이 고친다.
 public static class OptionCatalogBuilder
@@ -13,10 +13,11 @@ public static class OptionCatalogBuilder
     const string DataFolder = "Assets/_Project/Data";
     const string CatalogPath = DataFolder + "/OptionCatalog.asset";
     const string OldMatFolder = "Assets/_Project/Materials/Options";   // 예전 방식(재질 복제)에서 만든 폴더
+    const string InteriorMatFolder = "Assets/_Project/Materials/Interior"; // 재질형 옵션 재질 (권오민 10/13)
 
     struct Spec
     {
-        public string id, name, hex;
+        public string id, name, hex, mat;   // mat: 재질형이면 Interior 폴더의 재질 이름
         public PartType part;
         public int cost;
         public bool isDefault;
@@ -26,6 +27,8 @@ public static class OptionCatalogBuilder
     static Spec D(string id, PartType part, string name) => new Spec { id = id, part = part, name = name, isDefault = true };
     // 색상 옵션
     static Spec C(string id, PartType part, string name, int cost, string hex) => new Spec { id = id, part = part, name = name, cost = cost, hex = hex };
+    // 재질 옵션 (hex는 재질을 못 찾을 때 쓰는 색)
+    static Spec M(string id, PartType part, string name, int cost, string hex, string mat) => new Spec { id = id, part = part, name = name, cost = cost, hex = hex, mat = mat };
 
     // 옵션 ID는 권오민 COMSetupTools와 같게 맞춤 (wall_*, floor_wood/kang/navy/red)
     static readonly Spec[] Specs =
@@ -42,15 +45,15 @@ public static class OptionCatalogBuilder
         C("wall_fabric", PartType.Wall, "패브릭 베이지", 700000, "#D9CFC1"),
         // 주방 상판 (m_countertop)
         D("counter_white", PartType.Countertop, "화이트 상판"),
-        C("counter_darkstone", PartType.Countertop, "다크 스톤", 1800000, "#2E2E33"),
+        M("counter_darkstone", PartType.Countertop, "다크 스톤", 1800000, "#2E2E33", "Dark Stone"),
         // 소파 패브릭 (m_white_fabric)
         D("sofa_white", PartType.SofaFabric, "화이트"),
-        C("sofa_warmgray", PartType.SofaFabric, "웜 그레이", 300000, "#9E968F"),
-        C("sofa_navy", PartType.SofaFabric, "네이비", 300000, "#29334F"),
+        M("sofa_warmgray", PartType.SofaFabric, "웜 그레이", 300000, "#9E968F", "warm gray"),
+        M("sofa_navy", PartType.SofaFabric, "네이비", 300000, "#29334F", "Navy"),
         // 러그 (m_carpet)
         D("rug_default", PartType.Rug, "데모 씬 러그"),
-        C("rug_beige", PartType.Rug, "베이지", 250000, "#D9C7A6"),
-        C("rug_charcoal", PartType.Rug, "차콜", 250000, "#383A3D"),
+        M("rug_beige", PartType.Rug, "베이지", 250000, "#D9C7A6", "Beige"),
+        M("rug_charcoal", PartType.Rug, "차콜", 250000, "#383A3D", "Chakol"),
         // 그림 액자 (sm_painting) — 색 2종은 제안 값
         D("painting_default", PartType.Painting, "데모 씬 그림"),
         C("painting_warm", PartType.Painting, "웜 톤", 150000, "#E3C7A1"),
@@ -85,15 +88,21 @@ public static class OptionCatalogBuilder
             Color c = Color.white;
             if (!string.IsNullOrEmpty(s.hex)) ColorUtility.TryParseHtmlString(s.hex, out c);
             previews.TryGetValue(s.id, out Sprite preview);
+            Material mat = null;
+            if (!string.IsNullOrEmpty(s.mat))
+            {
+                mat = AssetDatabase.LoadAssetAtPath<Material>($"{InteriorMatFolder}/{s.mat}.mat");
+                if (mat == null) Debug.LogWarning($"[OptionCatalog] {s.id}: 재질 {InteriorMatFolder}/{s.mat}.mat 없음 → 색상형으로 둠");
+            }
 
             catalog.Items.Add(new OptionItem
             {
                 optionId = s.id,
                 part = s.part,
                 displayName = s.name,
-                useColor = true,
+                useColor = mat == null,
                 color = c,
-                material = null,
+                material = mat,
                 prefab = null,
                 preview = preview,
                 extraCost = s.cost,
@@ -109,7 +118,7 @@ public static class OptionCatalogBuilder
         Selection.activeObject = catalog;
         EditorGUIUtility.PingObject(catalog);
 
-        Debug.Log($"[OptionCatalog] {catalog.Items.Count}개 옵션 준비 완료 ({CatalogPath}, SRS v2.1 색상형)");
+        Debug.Log($"[OptionCatalog] {catalog.Items.Count}개 옵션 준비 완료 ({CatalogPath}, 색상형 + 재질형)");
     }
 
     static void EnsureFolder(string path)
