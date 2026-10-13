@@ -4,8 +4,8 @@ using UnityEngine.Rendering;
 
 // 10/13 강사 피드백 반영: 바닥 밝기 경계·전체 밝기 (NFR-10)
 // 메뉴 없음 → COM → 전체 세팅·점검 (1~12)이 부른다 (COMSetupAll). 몇 번 눌러도 같은 결과.
-//   1) 간접광 세기(Indirect Intensity) 1.5
-//      창유리 발광 없이 다시 구우면 실내가 어두워져서 튕긴 빛을 1.5배로 올린다.
+//   1) 간접광 세기(Indirect Intensity) 2.0
+//      창유리 발광 없이 다시 구우면 실내가 어두워져서 튕긴 빛을 올린다. 1.5 → 2.0 (10/13 강사 피드백: 낮인데 어둡다)
 //   2) 바닥(sm_floor) 라이트맵 해상도 2배 (Scale in Lightmap 2)
 //      바닥이 넓어 텍셀이 성겨서 차트(조각)마다 밝기가 달라 보이던 것(체크무늬 경계)을 줄인다. Stitch Seams 켬.
 //   3) 구역 반사 프로브(Baked)끼리 경계에서 섞이게 Blend Distance 1m, Box Projection 켬
@@ -13,7 +13,7 @@ using UnityEngine.Rendering;
 // 바꾼 뒤에는 조명을 다시 구워야 반영된다 (COMSetupAll 마지막 '저장하고 굽기').
 internal static class COMLightingFix
 {
-    const float IndirectScale = 1.5f;
+    const float IndirectScale = 2.0f;
     const float FloorLightmapScale = 2f;
     const float ProbeBlendDistance = 1f;
     static readonly string[] FloorNames = { "sm_floor" };
