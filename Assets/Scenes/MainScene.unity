@@ -14275,8 +14275,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 1
     m_LineSpacing: 1.1
-  m_Text: "<b>\uCEE4\uD53C \uB85C\uBD07\uD314</b>\nC  =  \uB3D9\uC791\nX  =  \uC77C\uC2DC\uC815\uC9C0
-    \uBC0F \uC774\uC5B4\uC11C \uC9C4\uD589\nZ  =  \uC815\uC9C0"
+  m_Text: "<b>\uCEE4\uD53C \uB85C\uBD07\uD314</b>\nC  =  \uB3D9\uC791\nX  =  \uC77C\uC2DC\uC815\uC9C0 / \uC774\uC5B4\uC11C\nZ  =  \uC791\uC5C5 \uCDE8\uC18C"
 --- !u!222 &1362811472
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -18645,7 +18644,7 @@ MonoBehaviour:
   approachAbove: 0.07
   gripAmount: 0.6
   testKey: 1
-  interactDistance: 2.5
+  interactDistance: 1.8
 --- !u!1 &2091175990
 GameObject:
   m_ObjectHideFlags: 0
