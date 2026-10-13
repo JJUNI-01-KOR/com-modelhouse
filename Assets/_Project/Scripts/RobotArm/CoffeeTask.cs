@@ -83,13 +83,19 @@ public class CoffeeTask : MonoBehaviour
     [Tooltip("컵 보관대·받침대에서 컵 위 이 높이에서 직선으로 내려와 잡는다 (m)")]
     [SerializeField] float approachAbove = 0.07f;
     [Range(0f, 1f)]
+    [Tooltip("그리퍼를 닫는 최대 정도. autoGrip이 켜져 있으면 컵 지름에 맞춰 이보다 덜 닫는다")]
     [SerializeField] float gripAmount = 0.6f;
+    [Tooltip("컵 지름을 재서 손가락이 컵 겉면에서 멈추게 닫는다 (컵을 뚫고 들어가지 않게)")]
+    [SerializeField] bool autoGrip = true;
 
     [Header("키 조작 (식탁 안내판과 같음)")]
     [Tooltip("C = 동작(로봇팔 클릭), X = 일시정지/이어서 진행, Z = 정지. 시연 빌드에서도 동작")]
     [SerializeField] bool testKey = true;
-    [Tooltip("로봇팔에서 이 거리(m) 안에 들어오면 상호작용 패널이 뜨고 C(동작)를 받는다. X·Z는 작업 중이면 어디서든")]
-    [SerializeField] float interactDistance = 2.5f;
+    [Tooltip("로봇팔에서 이 거리(m) 안에 들어오고 로봇팔 쪽을 보고 있으면 상호작용 패널이 뜨고 C(동작)를 받는다. X·Z는 작업 중이면 어디서든")]
+    [SerializeField] float interactDistance = 1.8f;
+    [Tooltip("시선과 로봇팔 방향 사이 각도가 이보다 작을 때만 (도). 옆 복도를 보면 패널이 뜨지 않게")]
+    [Range(10f, 180f)]
+    [SerializeField] float interactAngle = 60f;
 
     public float InteractDistance => interactDistance;
 
@@ -158,18 +164,28 @@ public class CoffeeTask : MonoBehaviour
         if (!testKey || Keyboard.current == null) return;
         if (Keyboard.current.cKey.wasPressedThisFrame && IsNearArm()) Run();                     // C: 동작 (로봇팔 클릭과 같음)
         if (Keyboard.current.xKey.wasPressedThisFrame) TogglePause();                     // X: 일시정지 / 이어서
-        if (Keyboard.current.zKey.wasPressedThisFrame) Stop();                            // Z: 정지
+        if (Keyboard.current.zKey.wasPressedThisFrame) Stop();                            // Z: 작업 취소
     }
 #endif
 
-    // 시점(카메라)이 로봇팔 가까이 있는지 (C 키, 조작 패널 표시에 사용)
+    // 시점(카메라)이 로봇팔 가까이에서 로봇팔 쪽을 보고 있는지 (C 키, 조작 패널 표시에 사용)
+    // 거리만 보면 벽 너머 복도에서도 켜지므로, 시선 각도와 가림(벽)도 확인한다
     public bool IsNearArm()
     {
         Camera cam = Camera.main;
         if (cam == null || arm == null) return Application.isEditor;
         Vector3 a = cam.transform.position, b = arm.BasePosition;
-        a.y = b.y = 0f;                        // 키 높이와 상관없이 바닥 거리로
-        return Vector3.Distance(a, b) <= interactDistance;
+        Vector3 flat = b - a; flat.y = 0f;     // 키 높이와 상관없이 바닥 거리로
+        if (flat.magnitude > interactDistance) return false;
+        Vector3 fwd = cam.transform.forward; fwd.y = 0f;
+        if (flat.sqrMagnitude > 0.04f && fwd.sqrMagnitude > 1e-6f && Vector3.Angle(fwd, flat) > interactAngle) return false;
+        // 눈에서 로봇팔 가운데까지 벽 같은 고정 물체가 막고 있으면 안 보이는 것
+        Vector3 target = b + Vector3.up * 0.3f;
+        if (Physics.Linecast(a, target, out RaycastHit hit, ~0, QueryTriggerInteraction.Ignore)
+            && !hit.transform.IsChildOf(arm.transform) && hit.collider.GetComponentInParent<CoffeeTask>() == null
+            && hit.distance < Vector3.Distance(a, target) - 0.5f && hit.collider.gameObject.isStatic)
+            return false;
+        return true;
     }
 
     void OnArmClicked(RobotArm clicked)
@@ -327,13 +343,13 @@ public class CoffeeTask : MonoBehaviour
             Vector3 p = old.position;
             yield return arm.GoToRoutine(Grasp(p), Facing(p), Vector3.up * approachAbove);
             if (!arm.LastMoveSucceeded) { yield return Fail(); yield break; }
-            yield return arm.SetGripRoutine(gripAmount);
+            yield return arm.SetGripRoutine(GripFor(old));
             arm.Grab(old);
             pickedFrom = new Pose(p, old.rotation); pickedFromSaucer = true;
             onSaucer = null;
 
             SetStep(CoffeeStep.Carrying);
-            Vector3 s = SinkCupPos();
+            Vector3 s = SinkSlot(inSink.Count);   // 컵마다 싱크대 안 다른 자리 (겹치지 않게)
             Vector3 drop = s + Vector3.up * sinkReleaseAbove;
             yield return arm.GoToRoutine(Grasp(drop), Facing(drop), Vector3.up * approachAbove);
             if (!arm.LastMoveSucceeded) { yield return Fail(); yield break; }
@@ -388,7 +404,7 @@ public class CoffeeTask : MonoBehaviour
         Vector3 pick = c.position;
         yield return arm.GoToRoutine(Grasp(pick), Facing(pick), Vector3.up * approachAbove);
         if (!arm.LastMoveSucceeded) { yield return Fail(); yield break; }
-        yield return arm.SetGripRoutine(gripAmount);
+        yield return arm.SetGripRoutine(GripFor(c));
         arm.Grab(c);
         pickedFrom = new Pose(pick, c.rotation); pickedFromSaucer = false;
 
@@ -423,6 +439,31 @@ public class CoffeeTask : MonoBehaviour
         current = null;
         isRunning = false;
         routine = null;
+    }
+
+    // 컵을 잡을 때 그리퍼를 닫는 정도: 컵 몸통 지름에 손가락 안쪽이 닿는 만큼 (손잡이·커피는 빼고 잰다)
+    float GripFor(Transform cupT)
+    {
+        if (!autoGrip || cupT == null) return gripAmount;
+        float diameter = CupDiameter(cupT);
+        if (diameter <= 0f) return gripAmount;
+        float g = arm.GripForWidth(diameter);
+        return g < 0f ? gripAmount : Mathf.Min(g, gripAmount);
+    }
+
+    static float CupDiameter(Transform cupT)
+    {
+        MeshFilter body = null; float best = 0f;
+        foreach (MeshFilter mf in cupT.GetComponentsInChildren<MeshFilter>())
+        {
+            if (mf.sharedMesh == null || mf.name.Contains("Coffee")) continue;
+            Vector3 sz = Vector3.Scale(mf.sharedMesh.bounds.size, mf.transform.lossyScale);
+            float v = Mathf.Abs(sz.x * sz.y * sz.z);
+            if (v > best) { best = v; body = mf; }
+        }
+        if (body == null) return 0f;
+        Vector3 size = Vector3.Scale(body.sharedMesh.bounds.size, body.transform.lossyScale);
+        return Mathf.Min(Mathf.Abs(size.x), Mathf.Abs(size.z));   // 손잡이가 한쪽으로 튀어나와도 작은 쪽이 몸통 지름
     }
 
     // 일시정지가 풀릴 때까지 대기 (단계 사이에서 일시정지 중에 다음 동작이 시작되지 않게)
@@ -482,6 +523,28 @@ public class CoffeeTask : MonoBehaviour
         if (sinkSpot != null) return sinkSpot.position;
         if (SinkBounds(out Bounds b)) return new Vector3(b.center.x, b.max.y, b.center.z);
         return sink != null ? sink.position : arm.BasePosition;
+    }
+
+    // 싱크대 안 n번째 컵 자리: 가운데를 기준으로 로봇에서 본 좌·우·가운데 순서로 나눈다
+    // (팔이 닿지 않는 자리는 건너뛰고, 다 안 되면 가운데)
+    [Tooltip("싱크대 안에 컵을 놓는 자리 사이 간격 (m). 컵이 겹치지 않을 만큼")]
+    [SerializeField] float sinkSlotSpacing = 0.09f;
+
+    Vector3 SinkSlot(int n)
+    {
+        Vector3 c = SinkCupPos();
+        if (sinkSpot != null) return c;                   // 자리를 직접 정했으면 그대로
+        Vector3 side = Vector3.Cross(Vector3.up, Direction(c)).normalized;
+        float limit = float.MaxValue;
+        if (SinkBounds(out Bounds b)) limit = Mathf.Max(0f, Mathf.Min(b.extents.x, b.extents.z) - 0.05f);   // 가장자리에서 5cm 안쪽
+        float[] offsets = { -1f, 1f, 0f };
+        for (int k = 0; k < offsets.Length; k++)
+        {
+            float o = offsets[(n + k) % offsets.Length] * Mathf.Min(sinkSlotSpacing, limit);
+            Vector3 p = c + side * o;
+            if (arm.CanReach(Grasp(p))) return p;
+        }
+        return c;
     }
 
     // 놓은 컵이 떨어져 앉을 곳: 개수대 바닥 쪽

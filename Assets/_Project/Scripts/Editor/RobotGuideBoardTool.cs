@@ -12,8 +12,8 @@ internal static class RobotGuideBoardTool
     const string Guide =
         "<b>커피 로봇팔</b>\n" +
         "C  =  동작\n" +
-        "X  =  일시정지 및 이어서 진행\n" +
-        "Z  =  정지";
+        "X  =  일시정지 / 이어서\n" +
+        "Z  =  작업 취소";
 
     [MenuItem("Tools/COM/로봇팔 사용 안내판 만들기")]
     static void Create()
