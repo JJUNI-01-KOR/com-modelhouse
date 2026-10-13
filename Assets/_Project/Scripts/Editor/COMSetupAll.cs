@@ -71,6 +71,9 @@ internal static class COMSetupAll
 
         // ── 11, 12: 10/13 화면 품질·UI 정리 ─────────────────────
         COMDay13.SetupQuality(r);
+        COMLightingFix.Setup(r);   // 10/13 강사 피드백: 바닥 경계·밝기 (간접광 1.5, 바닥 라이트맵 해상도, 구역 프로브 섞임)
+        COMSkyboxSetup.Setup(r);   // 10/13 강사 피드백 3번: 시간대별 스카이박스 재질 준비 (교체는 실행 중 SkyboxTimeOfDay)
+        COMMirrorProbeHours.Setup(r);  // 거울 프로브를 시각별 하늘·햇빛·창유리로 찍어 MirrorProbeHours에 연결
         COMDay13.CheckUI(r);
 
         // ── 10, 7: 점검 ─────────────────────────────────────────

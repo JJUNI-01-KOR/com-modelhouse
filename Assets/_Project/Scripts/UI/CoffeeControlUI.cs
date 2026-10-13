@@ -2,10 +2,10 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 커피 로봇팔 조작 패널 (FR-13: 사용 방법 안내, [일시정지]·[정지])
-/// - 화면 아래 가운데. 로봇팔 가까이(CoffeeTask.interactDistance, 기본 2.5m) 가면 상호작용 패널이 나타나고, 멀어지면 사라진다
+/// 커피 로봇팔 조작 패널 (FR-13: 사용 방법 안내, [일시정지]·[작업 취소])
+/// - 화면 아래 가운데. 로봇팔 가까이(CoffeeTask.interactDistance, 기본 1.8m)에서 로봇팔 쪽을 보면 상호작용 패널이 나타나고, 멀어지면 사라진다
 /// - 사용 방법: 로봇팔 클릭 → 커피 / 다시 클릭 → 지난 잔 정리 후 다음 잔
-/// - [동작] → 로봇팔 클릭과 같음 (대기 중에만), [일시정지]/[이어서] → CoffeeTask.TogglePause(), [정지] → CoffeeTask.Stop() (작업 중에만)
+/// - [동작] → 로봇팔 클릭과 같음 (대기 중에만), [일시정지]/[이어서] → CoffeeTask.TogglePause(), [작업 취소] → CoffeeTask.Stop(): 작업 취소, 든 컵은 제자리, 팔은 대기 자세 (작업 중에만)
 /// - 지금 단계(집는 중·옮기는 중 …)를 한 줄로 보여 준다
 /// 씬에 붙이지 않아도 Play 하면 CoffeeTask가 있는 씬에서 자동으로 만들어진다 (Canvas는 COM_UI를 찾아 씀).
 /// </summary>
@@ -59,7 +59,7 @@ public class CoffeeControlUI : MonoBehaviour
         rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0f);
         rt.pivot = new Vector2(0.5f, 0f);
         rt.anchoredPosition = new Vector2(0f, 24f);
-        rt.sizeDelta = new Vector2(560f, 156f);
+        rt.sizeDelta = new Vector2(660f, 156f);
 
         var bg = gameObject.AddComponent<Image>();
         bg.color = UIFactory.PanelColor;
@@ -69,7 +69,7 @@ public class CoffeeControlUI : MonoBehaviour
         Text title = UIFactory.CreateText(transform, "Title", "<b>커피 로봇팔 · 상호작용</b>", 20);
         UIFactory.SetLayoutSize(title, -1f, 26f);
         Text guide = UIFactory.CreateText(transform, "Guide",
-            "C = 동작 (로봇팔 클릭)   ·   X = 일시정지 및 이어서 진행   ·   Z = 정지", 16);
+            "C = 동작 (로봇팔 클릭)   ·   X = 일시정지 / 이어서   ·   Z = 작업 취소", 16);
         guide.color = new Color(0.82f, 0.84f, 0.88f, 1f);
         UIFactory.SetLayoutSize(guide, -1f, 22f);
         statusText = UIFactory.CreateText(transform, "Status", "", 16);
@@ -80,7 +80,7 @@ public class CoffeeControlUI : MonoBehaviour
         UIFactory.SetLayoutSize(row, -1f, 40f);
         runButton = UIFactory.CreateButton(row, "RunButton", "동작 (C)", 18);
         pauseButton = UIFactory.CreateButton(row, "PauseButton", "일시정지 (X)", 18);
-        stopButton = UIFactory.CreateButton(row, "StopButton", "정지 (Z)", 18);
+        stopButton = UIFactory.CreateButton(row, "StopButton", "작업 취소 (Z)", 18);
         runBg = runButton.GetComponent<Image>();
         pauseBg = pauseButton.GetComponent<Image>();
         stopBg = stopButton.GetComponent<Image>();
