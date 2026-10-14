@@ -41,7 +41,7 @@
 | 커피 로봇: 클릭하면 컵 꺼내기 → 커피 머신에서 받기(5초) → 받침대에 놓기, [동작]·[일시정지]·[정지] | FR-13, FR-15 |
 | 이벤트 기록(밀리초), 위치 초기화(고른 옵션은 유지), 옵션 초기화(모든 파트 기본) | FR-25, FR-26, FR-29 |
 | 옵션 7개 파트 색상 교체 | FR-29-01 ~ FR-29-07 |
-| 시각 버튼으로 햇빛·하늘·환경광·창문 밝기와 구역 조도(lx) 변경 | FR-30 |
+| 시각 버튼으로 햇빛·하늘(시각별 스카이박스)·환경광·창문 밝기·반사와 구역 조도(lx) 변경 | FR-30, NFR-10 |
 
 v2.5에서 삭제: FR-07 중문 자동 개폐, FR-27 URDF 로봇 불러오기. 로봇팔 직접 조종은 하지 않고 클릭으로 커피 만들기만 시연한다.
 
@@ -93,6 +93,18 @@ v2.5에서 삭제: FR-07 중문 자동 개폐, FR-27 URDF 로봇 불러오기. �
 
 구역 조도 = 창 쪽 조도 × 구역 계수(거실·주방 1.0, 침실 0.6, 현관 0.3) + 300 lx × 천장 조명 밝기
 
+### 시간대 화면 보정 (10/13 강사님 피드백, NFR-10)
+
+집 벽·바닥 빛은 미리 구운 라이트맵이라 시각이 바뀌어도 그대로다. 그래서 낮에도 실내가 어둡고, 밤에도 낮 반사가 남았다. `TimeOfDayController`는 고치지 않고, 시각 버튼(`HomeEvents.OnHourChanged`)을 구독하는 보정 컴포넌트를 따로 두었다. 모두 씬에 붙일 필요 없이 Play·빌드 실행 때 자동으로 하나씩 생긴다.
+
+| 컴포넌트 | 하는 일 |
+| --- | --- |
+| `DaylightFill` | 거실·주방·침실 구역 천장 아래에 그림자 없는 점광원을 격자로 깔고, 낮에는 켜고 밤(22시)에는 끈다. 색은 그 시각 햇빛 색을 흰색에 조금 섞음 |
+| `ExposureTimeOfDay` | 실행 중 전역 Volume을 만들어 시각별 노출(Post Exposure)만 살짝 올린다 (실제 밝기는 DaylightFill 담당) |
+| `SkyboxTimeOfDay` | 시각별 파노라마 하늘(`Resources/Skybox/Sky_XX`)로 바꾸고, 그림 속 해를 실제 햇빛 방향에 맞춰 돌린다 |
+| `ReflectionTimeOfDay` | 구역 반사 프로브와 기본 반사 세기를 시각별 비율(06·18시 45%, 09시 80%, 12시 100%, 22시 10%)로 조절, 창유리 불투명도 낮 30%·밤 12% |
+| `MirrorProbeHours` | 시각마다 미리 찍어 둔 거울 반사 사진 5장 중 그 시각 것만 켠다 |
+
 ---
 
 ## 조작법
@@ -128,12 +140,14 @@ flowchart LR
     UI["HUDController · LogPanelUI<br/>ZoneInfoUI · OptionPanelUI"]
     LG["EventLogger<br/>기록 100건"]
     CT["CoffeeTask<br/>커피 작업 순서"]
+    TV["시간대 화면 보정 (자동 생성)<br/>DaylightFill · ExposureTimeOfDay<br/>SkyboxTimeOfDay · ReflectionTimeOfDay<br/>MirrorProbeHours"]
   end
   CS --> HE
   Zone --> HE
   SM --> HE
   CP --> HE
   HE --> OP & ZL & UI & CT & LG
+  HE -->|OnHourChanged| TV
   LG -.->|Entries| UI
   CT --> RA["RobotArm<br/>IK · 이동 패턴"] & CM["CoffeeMachine<br/>추출 · 증기"]
   CL[ClockUI 시각 버튼] -.->|ITimeOfDay| TD["TimeOfDayController<br/>햇빛 · 하늘 · 창문 · 조도"]
@@ -149,7 +163,8 @@ Assets/
 │   │   ├── Core/      HomeEvents, EventLogger, IClickable, ITimeOfDay, ScenarioManager, ZoneData, ZoneVolume
 │   │   ├── Player/    PlayerController (1인칭), CursorPicker
 │   │   ├── Options/   OptionCatalog, OptionItem, ConfigurationState, OptionPart, PartType
-│   │   ├── Devices/   CoffeeMachine, CoffeeBrewEffect, LightFader, ZoneLight, TimeOfDayController
+│   │   ├── Devices/   CoffeeMachine, CoffeeBrewEffect, LightFader, ZoneLight, TimeOfDayController,
+│   │   │              DaylightFill, ExposureTimeOfDay, SkyboxTimeOfDay, ReflectionTimeOfDay, MirrorProbeHours
 │   │   ├── RobotArm/  RobotArm, CoffeeTask
 │   │   ├── UI/        HUDController, PanelUI, ClockUI, LogPanelUI, OptionPanelUI, ZoneInfoUI, CoffeeControlUI
 │   │   ├── Tools/     EvidenceCapture
@@ -157,7 +172,9 @@ Assets/
 │   ├── Prefabs/       RobotArm (UR3 + 그리퍼)
 │   ├── Data/          ZoneData 4개, OptionCatalog
 │   ├── Materials/     로봇·커피 머신·받침대 재질
-│   └── Settings/      URP, 거울 반사 프로브
+│   ├── Resources/     Skybox/Sky_06·09·12·18·22.mat (실행 중 Resources.Load로 불러옴)
+│   ├── Textures/      Skybox/Sky_06·09·12·18·22.png (파노라마 360° 하늘)
+│   └── Settings/      URP, 거울 반사 프로브 (MirrorProbes/ 시각별 .exr)
 ├── ArmRobot/      Unity 로보틱스 데모의 UR3·그리퍼 (ArticulationBody)
 └── Zeps3D/        Modern Apartment (.gitignore로 제외, 각자 Import)
 docs/              SRS v2.7, WBS, QA(체크리스트·버그 리포트·회귀 테스트), 클래스 다이어그램(drawio)
@@ -167,7 +184,7 @@ docs/              SRS v2.7, WBS, QA(체크리스트·버그 리포트·회귀 �
 
 | 메뉴 | 하는 일 |
 | --- | --- |
-| COM → 전체 세팅·점검 | 구역·플레이어·UI·시각 버튼·현관 조명 등 빠진 것만 채우고 점검 결과를 txt로 남김 |
+| COM → 전체 세팅·점검 | 구역·플레이어·UI·시각 버튼·현관 조명 등 빠진 것만 채우고 점검 결과를 txt로 남김. 10/13부터 바닥 밝기 경계·간접광 세기 보정, 시각별 스카이박스 재질 생성, 거울 반사 시각별 굽기도 함께 실행 (몇 번 눌러도 같은 결과, 마지막에 저장하고 굽기) |
 | Tools → COM → 옵션 카탈로그 만들기 (부록 A-7) | 옵션 목록·색·가격 에셋 생성 |
 | Tools → COM → 커피 스테이션 만들기 (컵·머신) | 컵·커피 머신·CoffeeTask 생성과 연결 |
 | Tools → COM → 로봇팔을 식탁 위에 올리기 | 로봇팔을 아일랜드 식탁 높이에 맞춤 |
@@ -218,6 +235,15 @@ git clone https://github.com/<계정>/com-modelhouse.git
 
 Unity Hub → Add → Add project from disk → 클론한 폴더 선택 (Unity `6000.4.0f1`), Modern Apartment는 각자 Import
 
+### 빌드
+
+1. `develop`을 pull 받은 뒤 Unity에서 Console에 빨간 에러가 없는지 확인
+2. File → Build Profiles → Windows → Build (씬 목록 맨 위 `MainScene`)
+3. 만든 실행 파일로 시각 버튼 5개, 옵션 7개 파트, 커피 로봇, 위치·옵션 초기화를 한 번씩 확인
+
+- 빌드하면 Unity가 `PC_RPAsset`, `GraphicsSettings`, `ProjectSettings`, `Build Profiles/`를 자동으로 다시 저장한다. 의도한 변경이 아니면 기능 커밋에 섞지 않는다
+- 런타임 스크립트(`Editor/` 폴더 밖)에서 에디터 전용 API를 쓰면 에디터 Play는 되고 빌드만 실패한다. `#if UNITY_EDITOR`로 감싸거나 실행 중에도 있는 API로 바꾼다 (트러블슈팅 10/14 참고)
+
 ---
 
 ## 협업 규칙
@@ -242,8 +268,8 @@ Unity Hub → Add → Add project from disk → 클론한 폴더 선택 (Unity `
 | 10/7 (수) | 에셋·씬 구축 | Modern Apartment 임포트, 4구역, 조명 굽기, 로봇팔 리그 |
 | 10/8 (목) | 기능 구현 1 | 1인칭 이동, 옵션 색상 교체, 커피 로봇 IK |
 | 10/12 (월) | 기능 구현 2 | Must 전부 동작 (MVP), 시간대, 커피 스테이션, 통합 |
-| 10/13 (화) | 폴리싱·빌드 | 12:30 기능 동결, 빌드 테스트 1 |
-| 10/14 (수) | 발표 | 빌드 테스트 2, 시연 영상, 발표, 회고 |
+| 10/13 (화) | 폴리싱·빌드 | 12:30 기능 동결, 빌드 테스트 1, 시간대 화면 보정 (강사님 피드백) |
+| 10/14 (수) | 발표 | 빌드 테스트 2 (빌드 에러 수정 후 성공), 시연 영상, 발표, 회고 |
 
 ---
 
@@ -266,6 +292,12 @@ Unity Hub → Add → Add project from disk → 클론한 폴더 선택 (Unity `
 | 10/12 | "Reduced additional punctual light shadows resolution" 경고 | 현관 점광원 그림자(6면)가 그림자 아틀라스(2048)에 안 들어감 | 현관 조명 그림자 끔 (다른 구역 조명과 같게, FPS 개선) |
 | 10/12 | 거울 반사가 COM 세팅 후 깨짐 | 품질 세팅이 거울 프로브(Custom)를 Baked로 바꿈, 이름에 번호가 붙어 중복 생성 | Custom 프로브 건너뛰기, 거울 이름 기준으로 1개만 |
 | 10/13 | 재질형 옵션 뒤 기본 옵션을 골라도 원래대로 안 돌아옴 | 색상형 기본 옵션이 지금 칸의 재질(바꾼 재질)을 원본으로 착각 | 처음 재질을 기억해 두고 항상 다시 끼움 |
+| 10/13 | 낮인데 거실·주방·침실이 어두움 | 벽·바닥 빛은 구운 라이트맵이라 시각과 무관, 햇빛은 창가 바닥에만 닿음. 노출만 올리면 하얗게 뜸 | 간접광 세기 1.5 → 2.0, 구역 천장 아래 채광 점광원(`DaylightFill`), 노출은 살짝만(`ExposureTimeOfDay`) |
+| 10/13 | 광택 바닥에 체크무늬 밝기 경계, 프로브 경계가 직선으로 보임 | 바닥이 넓어 라이트맵 텍셀이 성김, 구역 반사 프로브 박스 경계 | `sm_floor` Scale in Lightmap 2 + Stitch Seams, 구역 프로브 Blend Distance 1m + Box Projection |
+| 10/13 | 밤에도 거울·창·광택 바닥에 낮 반사가 비침 | 반사 프로브는 낮에 한 번 구운 사진 | 시각별 반사 세기 비율(`ReflectionTimeOfDay`), 거울은 시각마다 따로 구워 둠(`MirrorProbeHours`) |
+| 10/13 | 밤에 천장 조명을 받은 창유리가 흰 벽처럼 보임 | `m_glass`가 흰색 60% 불투명 + SrcBlend One이라 알파를 낮춰도 색이 더해짐 | 실행 중 복사본을 일반 알파 블렌드로, 불투명도 낮 30%·밤 12% |
+| 10/13 | 거울 프로브 사진만 바꾸면 화면에 반영 안 됨 | URP Forward+가 반사 프로브를 아틀라스에 올려 재사용 | 시작할 때 시각별 프로브를 만들어 두고 시각 버튼마다 그 시각 것만 켬 |
+| 10/14 | 빌드 실패: CS1061 `'Light' does not contain a definition for 'lightmapBakeType'` | `DaylightFill`이 에디터 전용 속성 `Light.lightmapBakeType`을 실행 중에 씀 → 빌드(Player)에는 없는 속성이라 에디터 Play는 되고 빌드만 실패 | `#if UNITY_EDITOR`로 감싸고, 빌드에서도 동작하는 `bakingOutput`(Realtime, isBaked = false)으로 실시간 빛 지정 |
 
 ---
 
@@ -277,6 +309,8 @@ Unity Hub → Add → Add project from disk → 클론한 폴더 선택 (Unity `
 | 10/12 | 전체 코드 리뷰 (스크립트 47개) | 일시정지 중 다음 단계 진행, 정지 시 컵 위치, 에디터 메뉴 재실행 시 깨짐, 거울 프로브 Baked 변환 | PR #8·#9 반영, 컴파일 경고 0 |
 | 10/13 | 오민 10/13 작업 | 개인 작업 메모 제외, QA 표 하나로 통일 | feature/chanjung-qa |
 | 10/13 | 시연 리허설 피드백 | 조작 패널은 1.8m 안에서 로봇팔을 볼 때만, [정지] → [작업 취소], 싱크대 컵 자리 분산, 컵 지름에 맞춰 그리퍼 닫기 | 반영 |
+| 10/13 | 강사님 피드백 (시간대 화면) | 낮인데 실내가 어둡다, 바닥 밝기 경계, 시간대별 하늘 배경 | 채광 조명·간접광 세기·노출 보정, 바닥 라이트맵·프로브 섞임, 시각별 스카이박스·거울 반사 반영 |
+| 10/14 | 빌드 테스트 2 | 에디터 전용 API(`lightmapBakeType`)를 런타임 스크립트에서 사용 | `DaylightFill` 수정 후 develop 머지, 빌드 성공 |
 
 ---
 
