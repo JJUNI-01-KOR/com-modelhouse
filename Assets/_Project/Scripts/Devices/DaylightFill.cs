@@ -70,7 +70,24 @@ public class DaylightFill : MonoBehaviour
                     bb.min.z + bb.size.z * (k + 0.5f) / nz);
                 Light l = go.AddComponent<Light>();
                 l.type = LightType.Point;
+
+                // [10/14 빌드 에러 수정] CS1061: 'Light'에 'lightmapBakeType'이 없음
+                // Light.lightmapBakeType은 에디터 전용 속성이라 빌드(실행 파일)에서는 존재하지 않는다.
+                // 에디터에서는 잘 되다가 빌드에서만 컴파일 에러가 나던 원인.
+                // → 에디터에서만 이 줄이 컴파일되도록 #if UNITY_EDITOR로 감쌌다.
+#if UNITY_EDITOR
                 l.lightmapBakeType = LightmapBakeType.Realtime;
+#endif
+                // 빌드에서도 "구운 빛이 아닌 실시간 빛"이라고 확실히 알려 주는 부분.
+                // bakingOutput은 실행 중에도 쓸 수 있는 속성이라 빌드에서도 동작한다.
+                // isBaked = false → 라이트맵에 구워진 적 없음, Realtime → 매 프레임 실시간으로 비춤.
+                // (런타임에 새로 만든 Light는 원래 실시간이지만, 에디터와 빌드 결과를 똑같이 맞추려고 명시)
+                l.bakingOutput = new LightBakingOutput
+                {
+                    isBaked = false,
+                    lightmapBakeType = LightmapBakeType.Realtime,
+                };
+
                 l.shadows = LightShadows.None;
                 l.range = range;
                 l.renderMode = LightRenderMode.Auto;
@@ -81,7 +98,7 @@ public class DaylightFill : MonoBehaviour
             }
     }
 
-    void OnEnable()  { HomeEvents.OnHourChanged += Apply; }
+    void OnEnable() { HomeEvents.OnHourChanged += Apply; }
     void OnDisable() { HomeEvents.OnHourChanged -= Apply; }
 
     void Start()
